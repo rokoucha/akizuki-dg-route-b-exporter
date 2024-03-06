@@ -286,17 +286,23 @@ func (m *MB_RL7023_11) SKTERM(ctx context.Context) error {
 	return ErrUnexpectedOutput
 }
 
+// 暗号化オプション
 type SKSENDTOSec uint8
 
 const (
-	SKSENDTOSecDisable  SKSENDTOSec = 0x00
-	SKSENDTOSecStrict   SKSENDTOSec = 0x01
+	// 必ず平文で送信
+	SKSENDTOSecDisable SKSENDTOSec = 0x00
+	// SKSECENABLE コマンドで送信先がセキュリティ有効で登録されている場合、暗号化して送ります。登録されてない場合、または、暗号化無しで登録されている場合、データは送信されません。
+	SKSENDTOSecStrict SKSENDTOSec = 0x01
+	// SKSECENABLE コマンドで送信先がセキュリティ有効で登録されている場合、暗号化して送ります。登録されてない場合、または、暗号化無しで登録されている場合、データは平文で送信されます。
 	SKSENDTOSecModerate SKSENDTOSec = 0x02
 )
 
 type SKSENDTOReserved uint8
 
-const SKSENDTOReservedValue SKSENDTOReserved = 0x00
+const (
+	SKSENDTOReservedValue SKSENDTOReserved = 0x00
+)
 
 func (m *MB_RL7023_11) erxudpMatcher(received *ERXUDP, handle uint8, ipaddr string, port uint16, frame *ECHONETLiteFrame) bool {
 	// sender mismatch
@@ -424,8 +430,11 @@ func (m *MB_RL7023_11) SKPING(ctx context.Context, reserved SKPINGReserved, ipad
 type SKSCANMode uint8
 
 const (
-	SKSCANModeEDScan          SKSCANMode = 0x00
-	SKSCANModeActiveWithIE    SKSCANMode = 0x02
+	// ED スキャン
+	SKSCANModeEDScan SKSCANMode = 0x00
+	// アクティブスキャン（IE あり）
+	SKSCANModeActiveWithIE SKSCANMode = 0x02
+	// アクティブスキャン（IE なし）
 	SKSCANModeActiveWithoutIE SKSCANMode = 0x03
 )
 
@@ -490,8 +499,10 @@ func (m *MB_RL7023_11) SKRMKEY(ctx context.Context, index uint8) error {
 type SKSECENABLEMode uint16
 
 const (
+	// セキュリティ無効
 	SKSECENABLEModeDisable SKSECENABLEMode = 0x00
-	SKSECENABLEModeEnable  SKSECENABLEMode = 0x01
+	// セキュリティ適用
+	SKSECENABLEModeEnable SKSECENABLEMode = 0x01
 )
 
 // 指定した IP アドレスに対する MAC 層セキュリティの有効・無効を指定します。
@@ -584,10 +595,14 @@ func (m *MB_RL7023_11) SKRESET(ctx context.Context) error {
 type SKTABLEMode uint8
 
 const (
+	// 端末で利用可能な IP アドレス一覧
 	SKTABLEModeAvailableIPAddresses SKTABLEMode = 0x01
-	SKTABLEModeNeighborCache        SKTABLEMode = 0x02
-	SKTABLEModeListeningPort        SKTABLEMode = 0x0e
-	SKTABLEModeTCPHandle            SKTABLEMode = 0x0f
+	// ネイバーキャッシュ
+	SKTABLEModeNeighborCache SKTABLEMode = 0x02
+	// 待ち受けポート設定状態一覧
+	SKTABLEModeListeningPort SKTABLEMode = 0x0e
+	// TCP ハンドル状態一覧
+	SKTABLEModeTCPHandle SKTABLEMode = 0x0f
 )
 
 // SKSTACK IP 内の各種テーブル内容を画面表示します。

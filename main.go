@@ -234,7 +234,7 @@ func main() {
 				SEOJ: [3]uint8{0x05, 0xff, 0x01},
 				DEOJ: [3]uint8{0x02, 0x88, 0x01},
 				ESV:  MB_RL7023_11.ECHONETLiteESVGet,
-				Props: []MB_RL7023_11.ECHONETLiteProperty{
+				Props: []MB_RL7023_11.ECHONETPropertySet{
 					{
 						EPC: 0xe7,
 						EDT: []uint8{},

@@ -4,6 +4,7 @@ import (
 	"fmt"
 )
 
+// 仮想レジスタ
 type Register uint8
 
 // 内容 属性 初期値 値域 保存

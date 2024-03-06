@@ -6,9 +6,9 @@ import (
 )
 
 var (
-	ErrInvalidECHONETService = errors.New("invalid ECHONET service")
-	ErrInvalidMessage        = errors.New("invalid message")
-	ErrInvalidPacket         = errors.New("invalid packet")
+	ErrInvalidMessage               = errors.New("invalid message")
+	ErrInvalidPacket                = errors.New("invalid packet")
+	ErrUnexpectedECHONETLiteService = errors.New("unexpected ECHONET Lite service")
 )
 
 // ECHONET Lite ヘッダ１
@@ -75,32 +75,42 @@ const (
 )
 
 // ECHONET プロパティ
-type ECHONETLitePropertyCode uint8
+type ECHONETProperty uint8
 
 const (
 	// ３．３．２５ 低圧スマート電力量メータクラス規定 瞬時電力計測値
-	ECHONETLitePropertyCodeInstantaneousPowerMeasurementValue ECHONETLitePropertyCode = 0xE7
+	ECHONETPropertyInstantaneousPowerMeasurementValue ECHONETProperty = 0xE7
 )
 
 // ECHONET プロパティ
-type ECHONETLiteProperty struct {
-	EPC ECHONETLitePropertyCode
+type ECHONETPropertySet struct {
+	// ECHONET プロパティ
+	EPC ECHONETProperty
+	// ECHONET プロパティ値データ
 	EDT []uint8
 }
 
 // ECHONET Liteデータ
 type ECHONETLiteData struct {
-	SEOJ  [3]uint8
-	DEOJ  [3]uint8
-	ESV   ECHONETLiteESV
-	Props []ECHONETLiteProperty
+	// 送信元ECHONET Liteオブジェクト指定
+	SEOJ [3]uint8
+	// 相手先ECHONET Liteオブジェクト指定
+	DEOJ [3]uint8
+	// ECHONET Lite サービス
+	ESV ECHONETLiteESV
+	// ECHONET プロパティ
+	Props []ECHONETPropertySet
 }
 
 // ECHONET Lite フレーム
 type ECHONETLiteFrame struct {
-	EHD1  ECHONETLiteEHD1
-	EHD2  ECHONETLiteEHD2
-	TID   [2]uint8
+	// ECHONET Lite ヘッダ１
+	EHD1 ECHONETLiteEHD1
+	// ECHONET Lite ヘッダ２
+	EHD2 ECHONETLiteEHD2
+	// Transaction ID
+	TID [2]uint8
+	// ECHONET Lite データ
 	EDATA ECHONETLiteData
 }
 
@@ -109,14 +119,14 @@ func NewECHONETLiteFrame(bytes []uint8) (*ECHONETLiteFrame, error) {
 		return nil, ErrInvalidPacket
 	}
 
-	var props []ECHONETLiteProperty
+	var props []ECHONETPropertySet
 	for i := 12; i < len(bytes); i += 2 {
 		epc := bytes[i]
 		pdc := bytes[i+1]
 		edt := bytes[i+2 : i+2+int(pdc)]
 
-		props = append(props, ECHONETLiteProperty{
-			EPC: ECHONETLitePropertyCode(epc),
+		props = append(props, ECHONETPropertySet{
+			EPC: ECHONETProperty(epc),
 			EDT: edt,
 		})
 
@@ -168,14 +178,14 @@ func (e *ECHONETLiteFrame) IsPairFrame(f *ECHONETLiteFrame) bool {
 
 func (e *ECHONETLiteFrame) InstantaneousPowerMeasurementValue() (int32, error) {
 	if e.EDATA.ESV != ECHONETLiteESVGet_Res {
-		return 0, ErrInvalidECHONETService
+		return 0, ErrUnexpectedECHONETLiteService
 	}
 
 	if len(e.EDATA.Props) != 1 {
 		return 0, ErrInvalidMessage
 	}
 
-	if e.EDATA.Props[0].EPC != ECHONETLitePropertyCodeInstantaneousPowerMeasurementValue {
+	if e.EDATA.Props[0].EPC != ECHONETPropertyInstantaneousPowerMeasurementValue {
 		return 0, ErrInvalidMessage
 	}
 

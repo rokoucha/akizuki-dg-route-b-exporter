@@ -7,33 +7,55 @@ import (
 	"strings"
 )
 
-var (
-	ErrReserved1             = errors.New("reserved1")
-	ErrReserved2             = errors.New("reserved2")
-	ErrReserved3             = errors.New("reserved3")
-	ErrCommandNotSupported   = errors.New("command not supported")
-	ErrInvalidParameterLengh = errors.New("invalid parameter lengh")
-	ErrInvalidParameter      = errors.New("invalid parameter")
-	ErrReserved7             = errors.New("reserved7")
-	ErrReserved8             = errors.New("reserved8")
-	ErrUARTInputError        = errors.New("uart input error")
-	ErrCommandFailed         = errors.New("command failed")
-	ErrUnknownErrorCode      = errors.New("unknown error code")
-)
-
+// https://rabbit-note.com/wp-content/uploads/2016/12/50f67559796399098e50cba8fdbe6d0a.pdf
 type ErrorCode uint8
 
 const (
-	ErrorCodeReserved1             ErrorCode = 0x01
-	ErrorCodeReserved2             ErrorCode = 0x02
-	ErrorCodeReserved3             ErrorCode = 0x03
-	ErrorCodeCommandNotSupported   ErrorCode = 0x04
-	ErrorCodeInvalidParameterLengh ErrorCode = 0x05
-	ErrorCodeInvalidParameter      ErrorCode = 0x06
-	ErrorCodeReserved7             ErrorCode = 0x07
-	ErrorCodeReserved8             ErrorCode = 0x08
-	ErrorCodeUARTInputError        ErrorCode = 0x09
-	ErrorCodeCommandFailed         ErrorCode = 0x10
+	// ER01 reserved
+	ErrorCodeReserved1 ErrorCode = 1
+	// ER02 reserved
+	ErrorCodeReserved2 ErrorCode = 2
+	// ER03 reserved
+	ErrorCodeReserved3 ErrorCode = 3
+	// ER04 指定されたコマンドがサポートされていない
+	ErrorCodeCommandNotSupported ErrorCode = 4
+	// ER05 指定されたコマンドの引数の数が正しくない
+	ErrorCodeInvalidParameterLengh ErrorCode = 5
+	// ER06 指定されたコマンドの引数形式や値域が正しくない
+	ErrorCodeInvalidParameter ErrorCode = 6
+	// ER07 reserved
+	ErrorCodeReserved7 ErrorCode = 7
+	// ER08 reserved
+	ErrorCodeReserved8 ErrorCode = 8
+	// ER09 UART 入力エラーが発生した
+	ErrorCodeUARTInputError ErrorCode = 9
+	// ER10 指定されたコマンドは受付けたが、実行結果が失敗した
+	ErrorCodeCommandFailed ErrorCode = 10
+)
+
+var (
+	// ER01 reserved
+	ErrReserved1 = errors.New("reserved1")
+	// ER02 reserved
+	ErrReserved2 = errors.New("reserved2")
+	// ER03 reserved
+	ErrReserved3 = errors.New("reserved3")
+	// ER04 指定されたコマンドがサポートされていない
+	ErrCommandNotSupported = errors.New("command not supported")
+	// ER05 指定されたコマンドの引数の数が正しくない
+	ErrInvalidParameterLengh = errors.New("invalid parameter lengh")
+	// ER06 指定されたコマンドの引数形式や値域が正しくない
+	ErrInvalidParameter = errors.New("invalid parameter")
+	// ER07 reserved
+	ErrReserved7 = errors.New("reserved7")
+	// ER08 reserved
+	ErrReserved8 = errors.New("reserved8")
+	// ER09 UART 入力エラーが発生した
+	ErrUARTInputError = errors.New("uart input error")
+	// ER10 指定されたコマンドは受付けたが、実行結果が失敗した
+	ErrCommandFailed = errors.New("command failed")
+	// unknown error code
+	ErrUnknownErrorCode = errors.New("unknown error code")
 )
 
 func parseError(res []string, err error) error {
@@ -54,10 +76,10 @@ const errorCodePrefix = "FAIL ER"
 
 func errorCodeFromString(s string) (ErrorCode, error) {
 	if !strings.HasPrefix(s, errorCodePrefix) {
-		return 0, errors.New("invalid error code: " + s)
+		return 0, ErrUnknownErrorCode
 	}
 
-	val, err := strconv.ParseUint(s[len(errorCodePrefix):], 16, 8)
+	val, err := strconv.ParseUint(s[len(errorCodePrefix):], 10, 8)
 	if err != nil {
 		return 0, err
 	}
@@ -66,7 +88,7 @@ func errorCodeFromString(s string) (ErrorCode, error) {
 }
 
 func (e ErrorCode) String() string {
-	return fmt.Sprintf("ER%02X", uint8(e))
+	return fmt.Sprintf("ER%02d", uint8(e))
 }
 
 func (e ErrorCode) Error() error {

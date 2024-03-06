@@ -14,21 +14,36 @@ var (
 )
 
 const (
-	ERXUDP_ID    = "ERXUDP"
-	ERXTCP_ID    = "ERXDATA"
-	EPONG_ID     = "EPONG"
-	ETCP_ID      = "ETCP"
-	EADDR_ID     = "EADDR"
+	// 自端末宛ての UDP（マルチキャスト含む）を受信すると通知されます。
+	ERXUDP_ID = "ERXUDP"
+	// TCP でデータを受信すると通知されます。
+	ERXTCP_ID = "ERXDATA"
+	// ICMP Echo reply を受信すると通知されます。
+	EPONG_ID = "EPONG"
+	// TCP の接続、切断処理が発生すると通知されます。
+	ETCP_ID = "ETCP"
+	// 自端末で利用可能な IPv6 アドレス一覧を通知します。
+	EADDR_ID = "EADDR"
+	// 自端末のネイバーキャッシュ内の IPv6 エントリー一覧を通知します。
 	ENEIGHBOR_ID = "ENEIGHBOR"
-	EPANDESC_ID  = "EPANDESC"
-	EEDSCAN_ID   = "EEDSCAN"
-	EPORT_ID     = "EPORT"
-	EHANDLE_ID   = "EHANDLE"
-	EVENT_ID     = "EVENT"
+	// アクティブスキャンを実行して発見した PAN を通知します。
+	EPANDESC_ID = "EPANDESC"
+	// ED スキャンの実行結果を、RSSI 値で一覧表示します。
+	EEDSCAN_ID = "EEDSCAN"
+	// UDP または TCP の待ち受けポート設定状態を一覧表示します。
+	EPORT_ID = "EPORT"
+	// TCP ハンドルの現在の状態を一覧表示します。
+	EHANDLE_ID = "EHANDLE"
+	// 汎用イベント
+	EVENT_ID = "EVENT"
 
-	ESREG_ID   = "ESREG"
-	EINFO_ID   = "EINFO"
-	EVER_ID    = "EVER"
+	// SKSREG
+	ESREG_ID = "ESREG"
+	// SKINFO
+	EINFO_ID = "EINFO"
+	// SKVER
+	EVER_ID = "EVER"
+	// SKAPPVER
 	EAPPVER_ID = "EAPPVER"
 )
 
