@@ -9,10 +9,9 @@ import (
 	"github.com/albenik/go-serial/v2"
 )
 
-var ErrCommandFailed = errors.New("command failed")
-
 var (
 	ErrAlreadyStreaming = errors.New("already streaming")
+	ErrCommandFailed    = errors.New("command failed")
 	ErrNotStreaming     = errors.New("not streaming")
 )
 
