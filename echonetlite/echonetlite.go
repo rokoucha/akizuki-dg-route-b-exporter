@@ -3,12 +3,13 @@ package echonetlite
 import (
 	"errors"
 	"slices"
+
+	"github.com/rokoucha/akizuki-dg-route-b-exporter/echonetlite/property"
+	"github.com/rokoucha/akizuki-dg-route-b-exporter/echonetlite/property/parser"
 )
 
 var (
-	ErrInvalidMessage               = errors.New("invalid message")
-	ErrInvalidPacket                = errors.New("invalid packet")
-	ErrUnexpectedECHONETLiteService = errors.New("unexpected ECHONET Lite service")
+	ErrInvalidPacket = errors.New("invalid packet")
 )
 
 // ECHONET Lite ヘッダ１
@@ -74,22 +75,6 @@ const (
 	ESVSetGet_SNA ESV = 0x5e
 )
 
-// ECHONET プロパティ
-type ECHONETProperty uint8
-
-const (
-	// ３．３．２５ 低圧スマート電力量メータクラス規定 瞬時電力計測値
-	ECHONETPropertyInstantaneousPowerMeasurementValue ECHONETProperty = 0xE7
-)
-
-// ECHONET プロパティ
-type ECHONETPropertySet struct {
-	// ECHONET プロパティ
-	EPC ECHONETProperty
-	// ECHONET プロパティ値データ
-	EDT []uint8
-}
-
 // ECHONET Liteデータ
 type Data struct {
 	// 送信元ECHONET Liteオブジェクト指定
@@ -99,7 +84,7 @@ type Data struct {
 	// ECHONET Lite サービス
 	ESV ESV
 	// ECHONET プロパティ
-	Props []ECHONETPropertySet
+	Properties []property.Property
 }
 
 // ECHONET Lite フレーム
@@ -119,35 +104,36 @@ func NewFrame(bytes []uint8) (*Frame, error) {
 		return nil, ErrInvalidPacket
 	}
 
-	var props []ECHONETPropertySet
-	for i := 12; i < len(bytes); i += 2 {
-		epc := bytes[i]
-		pdc := bytes[i+1]
-		edt := bytes[i+2 : i+2+int(pdc)]
-
-		props = append(props, ECHONETPropertySet{
-			EPC: ECHONETProperty(epc),
-			EDT: edt,
-		})
-
-		i += int(pdc)
-	}
-
-	if len(props) != int(bytes[11]) {
-		return nil, ErrInvalidPacket
-	}
-
 	e := &Frame{
 		EHD1: EHD1(bytes[0]),
 		EHD2: EHD2(bytes[1]),
 		TID:  [2]uint8{bytes[2], bytes[3]},
 		EDATA: Data{
-			SEOJ:  [3]uint8{bytes[4], bytes[5], bytes[6]},
-			DEOJ:  [3]uint8{bytes[7], bytes[8], bytes[9]},
-			ESV:   ESV(bytes[10]),
-			Props: props,
+			SEOJ: [3]uint8{bytes[4], bytes[5], bytes[6]},
+			DEOJ: [3]uint8{bytes[7], bytes[8], bytes[9]},
+			ESV:  ESV(bytes[10]),
 		},
 	}
+
+	opc := bytes[11]
+
+	props := make([]property.Property, opc)
+	for i := 12; i < len(bytes); i += 2 {
+		epc := bytes[i]
+		pdc := bytes[i+1]
+		edt := bytes[i+2 : i+2+int(pdc)]
+
+		parsed, err := parser.ParseProperty(e.EDATA.SEOJ, epc, edt)
+		if err != nil {
+			return nil, err
+		}
+
+		props[(i-12)/2] = parsed
+
+		i += int(pdc)
+	}
+
+	e.EDATA.Properties = props
 
 	return e, nil
 }
@@ -160,12 +146,14 @@ func (e *Frame) Bytes() []uint8 {
 	data = append(data, e.EDATA.SEOJ[:]...)
 	data = append(data, e.EDATA.DEOJ[:]...)
 	data = append(data, uint8(e.EDATA.ESV))
-	data = append(data, uint8(len(e.EDATA.Props)))
+	data = append(data, uint8(len(e.EDATA.Properties)))
 
-	for _, p := range e.EDATA.Props {
-		data = append(data, uint8(p.EPC))
-		data = append(data, uint8(len(p.EDT)))
-		data = append(data, p.EDT...)
+	for _, p := range e.EDATA.Properties {
+		set := p.ToSettable()
+
+		data = append(data, uint8(set.EPC))
+		data = append(data, uint8(len(set.EDT)))
+		data = append(data, set.EDT...)
 	}
 
 	return data
@@ -174,29 +162,4 @@ func (e *Frame) Bytes() []uint8 {
 func (e *Frame) IsPairFrame(f *Frame) bool {
 	// transaction ID mismatch
 	return slices.Equal(e.TID[:], f.TID[:])
-}
-
-func (e *Frame) InstantaneousPowerMeasurementValue() (int32, error) {
-	if e.EDATA.ESV != ESVGet_Res {
-		return 0, ErrUnexpectedECHONETLiteService
-	}
-
-	if len(e.EDATA.Props) != 1 {
-		return 0, ErrInvalidMessage
-	}
-
-	if e.EDATA.Props[0].EPC != ECHONETPropertyInstantaneousPowerMeasurementValue {
-		return 0, ErrInvalidMessage
-	}
-
-	if len(e.EDATA.Props[0].EDT) != 4 {
-		return 0, ErrInvalidMessage
-	}
-
-	var value int32
-	for _, b := range e.EDATA.Props[0].EDT {
-		value = (value << 8) | int32(b)
-	}
-
-	return value, nil
 }

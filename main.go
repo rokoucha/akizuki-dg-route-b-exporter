@@ -11,6 +11,8 @@ import (
 	"github.com/jessevdk/go-flags"
 	"github.com/rokoucha/akizuki-dg-route-b-exporter/MB_RL7023_11"
 	"github.com/rokoucha/akizuki-dg-route-b-exporter/echonetlite"
+	"github.com/rokoucha/akizuki-dg-route-b-exporter/echonetlite/property"
+	"github.com/rokoucha/akizuki-dg-route-b-exporter/echonetlite/property/smartmeter"
 	"github.com/rokoucha/akizuki-dg-route-b-exporter/serial"
 )
 
@@ -90,11 +92,14 @@ func main() {
 			if !ok {
 				continue
 			}
-			e, err := echonetlite.NewFrame(u.Data)
+			f, err := echonetlite.NewFrame(u.Data)
 			if err != nil {
 				continue
 			}
-			logger.Info("Received ECHONET Lite frame", "frame", e)
+			logger.Info("Received frame", "frame", f)
+			for _, p := range f.EDATA.Properties {
+				logger.Info("Property", "property", p)
+			}
 		}
 		return nil
 	}
@@ -239,6 +244,7 @@ func main() {
 
 	for {
 		logger.Info("Send command frame")
+
 		frame := &echonetlite.Frame{
 			EHD1: echonetlite.EHD1ECHONETLite,
 			EHD2: echonetlite.EHD2SpecifiedMessageFormat,
@@ -247,11 +253,8 @@ func main() {
 				SEOJ: [3]uint8{0x05, 0xff, 0x01},
 				DEOJ: [3]uint8{0x02, 0x88, 0x01},
 				ESV:  echonetlite.ESVGet,
-				Props: []echonetlite.ECHONETPropertySet{
-					{
-						EPC: 0xe7,
-						EDT: []uint8{},
-					},
+				Properties: []property.Property{
+					&smartmeter.MeasuredInstantaneousElectricPower{},
 				},
 			},
 		}
@@ -267,12 +270,8 @@ func main() {
 			os.Exit(1)
 		}
 
-		kw, err := e.InstantaneousPowerMeasurementValue()
-		if err == nil {
-			logger.Info("Instantaneous power measurement value", "kw", kw)
-		} else {
-			logger.Error("Failed to parse packet", "err", err)
-		}
+		kw := e.EDATA.Properties[0].(*smartmeter.MeasuredInstantaneousElectricPower).Value
+		logger.Info("Instantaneous power measurement value", "kw", kw)
 
 		time.Sleep(60 * time.Second)
 	}
