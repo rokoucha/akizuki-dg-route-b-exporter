@@ -75,7 +75,7 @@ type ERXUDP struct {
 	SenderLLA string
 	Secured   bool
 	Reserved  uint8
-	Data      *ECHONETLiteFrame
+	Data      any
 }
 
 func NewERXUDP(line string) (*ERXUDP, error) {
@@ -104,17 +104,18 @@ func NewERXUDP(line string) (*ERXUDP, error) {
 	if err != nil {
 		return nil, err
 	}
-	data := make([]uint8, len(fields[8])/2)
+	bytes := make([]uint8, len(fields[8])/2)
 	for i := 0; i < len(fields[8]); i += 2 {
 		b, err := strconv.ParseUint(fields[8][i:i+2], 16, 8)
 		if err != nil {
 			return nil, err
 		}
-		data[i/2] = uint8(b)
+		bytes[i/2] = uint8(b)
 	}
-	e, err := NewECHONETLiteFrame(data)
+	var data any
+	data, err = NewECHONETLiteFrame(bytes)
 	if err != nil {
-		return nil, err
+		data = bytes
 	}
 
 	return &ERXUDP{
@@ -125,7 +126,7 @@ func NewERXUDP(line string) (*ERXUDP, error) {
 		SenderLLA: fields[4],
 		Secured:   secured,
 		Reserved:  uint8(reserved),
-		Data:      e,
+		Data:      data,
 	}, nil
 }
 
@@ -645,6 +646,8 @@ func ParseEvent(l []string) []any {
 			e, err := NewERXUDP(l[i])
 			if err == nil {
 				events = append(events, e)
+			} else {
+				fmt.Printf("ERXUDP error: %#v\n", err)
 			}
 			i++
 			continue

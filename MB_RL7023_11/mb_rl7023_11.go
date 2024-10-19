@@ -304,7 +304,7 @@ const (
 	SKSENDTOReservedValue SKSENDTOReserved = 0x00
 )
 
-func (m *MB_RL7023_11) erxudpMatcher(received *ERXUDP, handle uint8, ipaddr string, port uint16, frame *ECHONETLiteFrame) bool {
+func (m *MB_RL7023_11) erxudpMatcher(received *ERXUDP, handle uint8, ipaddr string, port uint16) bool {
 	// sender mismatch
 	if received.Sender != ipaddr {
 		m.logger.Debug("sender mismatch", "expected", ipaddr, "actual", received.Sender)
@@ -326,12 +326,6 @@ func (m *MB_RL7023_11) erxudpMatcher(received *ERXUDP, handle uint8, ipaddr stri
 	// destination port mismatch
 	if received.Lport != m.ports[handle-1] {
 		m.logger.Debug("destination port mismatch", "expected", m.ports[handle-1], "actual", received.Lport)
-		return false
-	}
-
-	// ECHONET Lite frame mismatch
-	if !frame.IsPairFrame(received.Data) {
-		m.logger.Debug("ECHONET Lite frame mismatch", "expected", frame, "actual", received.Data)
 		return false
 	}
 
@@ -369,7 +363,18 @@ func (m *MB_RL7023_11) SKSENDTO(ctx context.Context, handle uint8, ipaddr string
 				return false
 			}
 
-			return m.erxudpMatcher(e, handle, ipaddr, port, data)
+			// UDP frame mismatch
+			if !m.erxudpMatcher(e, handle, ipaddr, port) {
+				return false
+			}
+
+			// ECHONET Lite frame mismatch
+			if r, ok := e.Data.(*ECHONETLiteFrame); ok && !r.IsPairFrame(data) {
+				m.logger.Debug("ECHONET Lite frame mismatch", "expected", data, "actual", r)
+				return false
+			}
+
+			return true
 		})
 	}
 	res, events, err := m.exec(ctx, command, execOptions{Payload: payload, Stopper: stopper, Timeout: execTimeout * 2 * time.Second})
@@ -379,9 +384,15 @@ func (m *MB_RL7023_11) SKSENDTO(ctx context.Context, handle uint8, ipaddr string
 
 	for _, v := range events {
 		if e, ok := v.(*ERXUDP); ok {
-			if m.erxudpMatcher(e, handle, ipaddr, port, data) {
-				return e, nil
+			if !m.erxudpMatcher(e, handle, ipaddr, port) {
+				continue
 			}
+
+			if r, ok := e.Data.(*ECHONETLiteFrame); ok && !r.IsPairFrame(data) {
+				continue
+			}
+
+			return e, nil
 		}
 	}
 
