@@ -90,7 +90,7 @@ func main() {
 			if !ok {
 				continue
 			}
-			e, err := echonetlite.NewECHONETLiteFrame(u.Data)
+			e, err := echonetlite.NewFrame(u.Data)
 			if err != nil {
 				continue
 			}
@@ -239,14 +239,14 @@ func main() {
 
 	for {
 		logger.Info("Send command frame")
-		frame := &echonetlite.ECHONETLiteFrame{
-			EHD1: echonetlite.ECHONETLiteEHD1ECHONETLite,
-			EHD2: echonetlite.ECHONETLiteEHD2SpecifiedMessageFormat,
+		frame := &echonetlite.Frame{
+			EHD1: echonetlite.EHD1ECHONETLite,
+			EHD2: echonetlite.EHD2SpecifiedMessageFormat,
 			TID:  [2]uint8{0x00, 0x01},
-			EDATA: echonetlite.ECHONETLiteData{
+			EDATA: echonetlite.Data{
 				SEOJ: [3]uint8{0x05, 0xff, 0x01},
 				DEOJ: [3]uint8{0x02, 0x88, 0x01},
-				ESV:  echonetlite.ECHONETLiteESVGet,
+				ESV:  echonetlite.ESVGet,
 				Props: []echonetlite.ECHONETPropertySet{
 					{
 						EPC: 0xe7,
@@ -261,7 +261,7 @@ func main() {
 			os.Exit(1)
 		}
 
-		e, err := echonetlite.NewECHONETLiteFrame(received.Data)
+		e, err := echonetlite.NewFrame(received.Data)
 		if err != nil {
 			logger.Error("Failed to parse packet", "err", err)
 			os.Exit(1)
