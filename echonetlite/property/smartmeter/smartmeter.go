@@ -12,47 +12,13 @@ const (
 	ClassCode      = 0x88
 )
 
-// ３．３．２５ 低圧スマート電力量メータクラス規定
-const (
-	// 動作状態
-	EPCOperationStatus property.EPC = 0x80
-	// B ルート識別番号
-	EPCRouteBIdentificationNumber property.EPC = 0xC0
-	// 1分積算電力量計測値（正方向、逆方向計測値）
-	EPCOneMinuteMeasuredCumulativeAmountsOfElectricEnergyMeasured property.EPC = 0xD0
-	// 係数
-	EPCCoefficient property.EPC = 0xD3
-	// 積積算電力量有効桁数
-	EPCNumberOfEffectiveDigitsForCumulativeAmountOfElectricEnergy property.EPC = 0xD7
-	// 積算電力量計測値(正方向計測値)
-	EPCMeasuredCumulativeAmountOfElectricEnergyNormalDirection property.EPC = 0xE0
-	// 積算電力量単位（正方向、逆方向計測値）
-	EPCUnitForCumulativeAmountOfElectricEnergy property.EPC = 0xE1
-	// 積算電力量計測値履歴１(正方向計測値)
-	EPCHistoricalDataOfMeasuredCumulativeAmountOfElectricEnergy1NormalDirection property.EPC = 0xE2
-	// 積算電力量計測値(逆方向計測値)
-	EPCMeasuredCumulativeAmountOfElectricEnergyReverseDirection property.EPC = 0xE3
-	// 積算電力量計測値履歴１(逆方向計測値)
-	EPCHistoricalDataOfMeasuredCumulativeAmountOfElectricEnergy1ReverseDirection property.EPC = 0xE4
-	// 積算履歴収集日１
-	EPCDayForWhichTheHistoricalDataOfMeasuredCumulativeAmountOfElectricEnergyIsToBeRetrieved1 property.EPC = 0xE5
-	// 瞬時電力計測値
-	EPCMeasuredInstantaneousElectricPower property.EPC = 0xE7
-	// 瞬時電流計測値
-	EPCMeasuredInstantaneousCurrents property.EPC = 0xE8
-	// 定時積算電力量計測値(正方向計測値)
-	EPCCumulativeAmountOfElectricEnergyMeasuredAtFixedTimeNormalDirection property.EPC = 0xEA
-	// 定時積算電力量計測値(逆方向計測値)
-	EPCCumulativeAmountOfElectricEnergyMeasuredAtFixedTimeReverseDirection property.EPC = 0xEB
-	// 積算電力量計測値履歴２（正方向、逆方向計測値）
-	EPCHistoricalDataOfMeasuredCumulativeAmountOfElectricEnergy2 property.EPC = 0xEC
-	// 積算履歴収集日２
-	EPCDayForWhichTheHistoricalDataOfMeasuredCumulativeAmountOfElectricEnergyIsToBeRetrieved2 property.EPC = 0xED
-	// 積算電力量計測値履歴３（正方向、逆方向計測値）
-	EPCHistoricalDataOfMeasuredCumulativeAmountOfElectricEnergy3 property.EPC = 0xEE
-	// 積算履歴収集日3
-	EPCDayForWhichTheHistoricalDataOfMeasuredCumulativeAmountOfElectricEnergyIsToBeRetrieved3 property.EPC = 0xEF
-)
+type EnergyValuePair struct {
+	Normal  uint32
+	Reverse uint32
+}
+
+// 動作状態
+const EPCOperationStatus property.EPC = 0x80
 
 type OperationStatus struct {
 	Enabled bool
@@ -84,6 +50,9 @@ func NewOperationStatus(p property.RawProperty) (*OperationStatus, error) {
 	}, nil
 }
 
+// B ルート識別番号
+const EPCRouteBIdentificationNumber property.EPC = 0xC0
+
 type RouteBIdentificationNumber struct {
 	ManufacturerCode string
 	FreeArea         string
@@ -110,6 +79,9 @@ func NewRouteBIdentificationNumber(p property.RawProperty) (*RouteBIdentificatio
 		FreeArea:         string(p.EDT[4:]),
 	}, nil
 }
+
+// 1分積算電力量計測値（正方向、逆方向計測値）
+const EPCOneMinuteMeasuredCumulativeAmountsOfElectricEnergyMeasured property.EPC = 0xD0
 
 type OneMinuteMeasuredCumulativeAmountsOfElectricEnergyMeasured struct {
 	MeasuredAt time.Time
@@ -140,6 +112,9 @@ func NewOneMinuteMeasuredCumulativeAmountsOfElectricEnergyMeasured(p property.Ra
 	}, nil
 }
 
+// 係数
+const EPCCoefficient property.EPC = 0xD3
+
 type Coefficient struct {
 	Value uint32
 }
@@ -164,6 +139,9 @@ func NewCoefficient(p property.RawProperty) (*Coefficient, error) {
 		Value: binary.BigEndian.Uint32(p.EDT),
 	}, nil
 }
+
+// 積積算電力量有効桁数
+const EPCNumberOfEffectiveDigitsForCumulativeAmountOfElectricEnergy property.EPC = 0xD7
 
 type NumberOfEffectiveDigitsForCumulativeAmountOfElectricEnergy struct {
 	Value uint8
@@ -190,6 +168,9 @@ func NewNumberOfEffectiveDigitsForCumulativeAmountOfElectricEnergy(p property.Ra
 	}, nil
 }
 
+// 積算電力量計測値(正方向計測値)
+const EPCMeasuredCumulativeAmountOfElectricEnergyNormalDirection property.EPC = 0xE0
+
 type MeasuredCumulativeAmountOfElectricEnergyNormalDirection struct {
 	Value uint32
 }
@@ -214,6 +195,9 @@ func NewMeasuredCumulativeAmountOfElectricEnergyNormalDirection(p property.RawPr
 		Value: binary.BigEndian.Uint32(p.EDT),
 	}, nil
 }
+
+// 積算電力量単位（正方向、逆方向計測値）
+const EPCUnitForCumulativeAmountOfElectricEnergy property.EPC = 0xE1
 
 type UnitForCumulativeAmountOfElectricEnergy struct {
 	Value float32
@@ -262,6 +246,9 @@ func NewUnitForCumulativeAmountOfElectricEnergy(p property.RawProperty) (*UnitFo
 	}, nil
 }
 
+// 積算電力量計測値履歴１(正方向計測値)
+const EPCHistoricalDataOfMeasuredCumulativeAmountOfElectricEnergy1NormalDirection property.EPC = 0xE2
+
 type HistoricalDataOfMeasuredCumulativeAmountOfElectricEnergy1NormalDirection struct {
 	CollectedAt uint16
 	Values      []uint32
@@ -294,6 +281,9 @@ func NewHistoricalDataOfMeasuredCumulativeAmountOfElectricEnergy1NormalDirection
 	}, nil
 }
 
+// 積算電力量計測値(逆方向計測値)
+const EPCMeasuredCumulativeAmountOfElectricEnergyReverseDirection property.EPC = 0xE3
+
 type MeasuredCumulativeAmountOfElectricEnergyReverseDirection struct {
 	Value uint32
 }
@@ -318,6 +308,9 @@ func NewMeasuredCumulativeAmountOfElectricEnergyReverseDirection(p property.RawP
 		Value: binary.BigEndian.Uint32(p.EDT),
 	}, nil
 }
+
+// 積算電力量計測値履歴１(逆方向計測値)
+const EPCHistoricalDataOfMeasuredCumulativeAmountOfElectricEnergy1ReverseDirection property.EPC = 0xE4
 
 type HistoricalDataOfMeasuredCumulativeAmountOfElectricEnergy1ReverseDirection struct {
 	CollectedAt uint16
@@ -351,6 +344,9 @@ func NewHistoricalDataOfMeasuredCumulativeAmountOfElectricEnergy1ReverseDirectio
 	}, nil
 }
 
+// 積算履歴収集日１
+const EPCDayForWhichTheHistoricalDataOfMeasuredCumulativeAmountOfElectricEnergyIsToBeRetrieved1 property.EPC = 0xE5
+
 type DayForWhichTheHistoricalDataOfMeasuredCumulativeAmountOfElectricEnergyIsToBeRetrieved1 struct {
 	CollectedAt uint8
 }
@@ -376,6 +372,9 @@ func NewDayForWhichTheHistoricalDataOfMeasuredCumulativeAmountOfElectricEnergyIs
 	}, nil
 }
 
+// 瞬時電力計測値
+const EPCMeasuredInstantaneousElectricPower property.EPC = 0xE7
+
 type MeasuredInstantaneousElectricPower struct {
 	Value int32
 }
@@ -400,6 +399,9 @@ func NewMeasuredInstantaneousElectricPower(p property.RawProperty) (*MeasuredIns
 		Value: int32(binary.BigEndian.Uint32(p.EDT)),
 	}, nil
 }
+
+// 瞬時電流計測値
+const EPCMeasuredInstantaneousCurrents property.EPC = 0xE8
 
 type MeasuredInstantaneousCurrents struct {
 	R float32
@@ -428,6 +430,9 @@ func NewMeasuredInstantaneousCurrents(p property.RawProperty) (*MeasuredInstanta
 	}, nil
 }
 
+// 定時積算電力量計測値(正方向計測値)
+const EPCCumulativeAmountOfElectricEnergyMeasuredAtFixedTimeNormalDirection property.EPC = 0xEA
+
 type CumulativeAmountOfElectricEnergyMeasuredAtFixedTimeNormalDirection struct {
 	MeasuredAt time.Time
 	Value      uint32
@@ -454,6 +459,9 @@ func NewCumulativeAmountOfElectricEnergyMeasuredAtFixedTimeNormalDirection(p pro
 		Value:      binary.BigEndian.Uint32(p.EDT[7:11]),
 	}, nil
 }
+
+// 定時積算電力量計測値(逆方向計測値)
+const EPCCumulativeAmountOfElectricEnergyMeasuredAtFixedTimeReverseDirection property.EPC = 0xEB
 
 type CumulativeAmountOfElectricEnergyMeasuredAtFixedTimeReverseDirection struct {
 	MeasuredAt time.Time
@@ -482,10 +490,8 @@ func NewCumulativeAmountOfElectricEnergyMeasuredAtFixedTimeReverseDirection(p pr
 	}, nil
 }
 
-type EnergyValuePair struct {
-	Normal  uint32
-	Reverse uint32
-}
+// 積算電力量計測値履歴２（正方向、逆方向計測値）
+const EPCHistoricalDataOfMeasuredCumulativeAmountOfElectricEnergy2 property.EPC = 0xEC
 
 type HistoricalDataOfMeasuredCumulativeAmountOfElectricEnergy2 struct {
 	CollectedAt        time.Time
@@ -530,6 +536,9 @@ func NewHistoricalDataOfMeasuredCumulativeAmountOfElectricEnergy2(p property.Raw
 	}, nil
 }
 
+// 積算履歴収集日２
+const EPCDayForWhichTheHistoricalDataOfMeasuredCumulativeAmountOfElectricEnergyIsToBeRetrieved2 property.EPC = 0xED
+
 type DayForWhichTheHistoricalDataOfMeasuredCumulativeAmountOfElectricEnergyIsToBeRetrieved2 struct {
 	CollectedAt        time.Time
 	CollectionSegments uint8
@@ -561,6 +570,9 @@ func NewDayForWhichTheHistoricalDataOfMeasuredCumulativeAmountOfElectricEnergyIs
 		CollectionSegments: p.EDT[6],
 	}, nil
 }
+
+// 積算電力量計測値履歴３（正方向、逆方向計測値）
+const EPCHistoricalDataOfMeasuredCumulativeAmountOfElectricEnergy3 property.EPC = 0xEE
 
 type HistoricalDataOfMeasuredCumulativeAmountOfElectricEnergy3 struct {
 	CollectedAt        time.Time
@@ -604,6 +616,9 @@ func NewHistoricalDataOfMeasuredCumulativeAmountOfElectricEnergy3(p property.Raw
 		Values:             values,
 	}, nil
 }
+
+// 積算履歴収集日3
+const EPCDayForWhichTheHistoricalDataOfMeasuredCumulativeAmountOfElectricEnergyIsToBeRetrieved3 property.EPC = 0xEF
 
 type DayForWhichTheHistoricalDataOfMeasuredCumulativeAmountOfElectricEnergyIsToBeRetrieved3 struct {
 	CollectedAt        time.Time
