@@ -1,4 +1,4 @@
-package MB_RL7023_11
+package echonetlite
 
 import (
 	"errors"

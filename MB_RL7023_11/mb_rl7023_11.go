@@ -333,7 +333,7 @@ func (m *MB_RL7023_11) erxudpMatcher(received *ERXUDP, handle uint8, ipaddr stri
 }
 
 // 指定した宛先に UDP でデータを送信します。
-func (m *MB_RL7023_11) SKSENDTO(ctx context.Context, handle uint8, ipaddr string, port uint16, sec SKSENDTOSec, reserved SKSENDTOReserved, data *ECHONETLiteFrame) (*ERXUDP, error) {
+func (m *MB_RL7023_11) SKSENDTO(ctx context.Context, handle uint8, ipaddr string, port uint16, sec SKSENDTOSec, reserved SKSENDTOReserved, payload []uint8) (*ERXUDP, error) {
 	if len(m.addrs) == 0 {
 		return nil, ErrAddressUnavaiable
 	}
@@ -341,8 +341,6 @@ func (m *MB_RL7023_11) SKSENDTO(ctx context.Context, handle uint8, ipaddr string
 	if len(m.ports) == 0 || len(m.ports) < int(handle) {
 		return nil, ErrPortUnavaiable
 	}
-
-	payload := data.Bytes()
 
 	command := fmt.Sprintf(
 		"SKSENDTO %X %s %04X %X %X %04X ",
@@ -363,18 +361,7 @@ func (m *MB_RL7023_11) SKSENDTO(ctx context.Context, handle uint8, ipaddr string
 				return false
 			}
 
-			// UDP frame mismatch
-			if !m.erxudpMatcher(e, handle, ipaddr, port) {
-				return false
-			}
-
-			// ECHONET Lite frame mismatch
-			if r, ok := e.Data.(*ECHONETLiteFrame); ok && !r.IsPairFrame(data) {
-				m.logger.Debug("ECHONET Lite frame mismatch", "expected", data, "actual", r)
-				return false
-			}
-
-			return true
+			return m.erxudpMatcher(e, handle, ipaddr, port)
 		})
 	}
 	res, events, err := m.exec(ctx, command, execOptions{Payload: payload, Stopper: stopper, Timeout: execTimeout * 2 * time.Second})
@@ -384,15 +371,9 @@ func (m *MB_RL7023_11) SKSENDTO(ctx context.Context, handle uint8, ipaddr string
 
 	for _, v := range events {
 		if e, ok := v.(*ERXUDP); ok {
-			if !m.erxudpMatcher(e, handle, ipaddr, port) {
-				continue
+			if m.erxudpMatcher(e, handle, ipaddr, port) {
+				return e, nil
 			}
-
-			if r, ok := e.Data.(*ECHONETLiteFrame); ok && !r.IsPairFrame(data) {
-				continue
-			}
-
-			return e, nil
 		}
 	}
 

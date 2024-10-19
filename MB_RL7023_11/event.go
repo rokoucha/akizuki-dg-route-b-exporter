@@ -75,7 +75,7 @@ type ERXUDP struct {
 	SenderLLA string
 	Secured   bool
 	Reserved  uint8
-	Data      any
+	Data      []uint8
 }
 
 func NewERXUDP(line string) (*ERXUDP, error) {
@@ -104,18 +104,13 @@ func NewERXUDP(line string) (*ERXUDP, error) {
 	if err != nil {
 		return nil, err
 	}
-	bytes := make([]uint8, len(fields[8])/2)
+	data := make([]uint8, len(fields[8])/2)
 	for i := 0; i < len(fields[8]); i += 2 {
 		b, err := strconv.ParseUint(fields[8][i:i+2], 16, 8)
 		if err != nil {
 			return nil, err
 		}
-		bytes[i/2] = uint8(b)
-	}
-	var data any
-	data, err = NewECHONETLiteFrame(bytes)
-	if err != nil {
-		data = bytes
+		data[i/2] = uint8(b)
 	}
 
 	return &ERXUDP{

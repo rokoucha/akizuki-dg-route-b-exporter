@@ -10,6 +10,7 @@ import (
 
 	"github.com/jessevdk/go-flags"
 	"github.com/rokoucha/akizuki-dg-route-b-exporter/MB_RL7023_11"
+	"github.com/rokoucha/akizuki-dg-route-b-exporter/echonetlite"
 	"github.com/rokoucha/akizuki-dg-route-b-exporter/serial"
 )
 
@@ -85,11 +86,15 @@ func main() {
 		}
 		events := MB_RL7023_11.ParseEvent(lines)
 		for _, event := range events {
-			if e, ok := event.(*MB_RL7023_11.ERXUDP); ok {
-				if d, ok := e.Data.(*MB_RL7023_11.ECHONETLiteFrame); ok {
-					logger.Info("Received UDP packet", "event", e, "data", d)
-				}
+			u, ok := event.(*MB_RL7023_11.ERXUDP)
+			if !ok {
+				continue
 			}
+			e, err := echonetlite.NewECHONETLiteFrame(u.Data)
+			if err != nil {
+				continue
+			}
+			logger.Info("Received ECHONET Lite frame", "frame", e)
 		}
 		return nil
 	}
@@ -233,35 +238,41 @@ func main() {
 	}
 
 	for {
-		// logger.Info("Send command frame")
-		// frame := &MB_RL7023_11.ECHONETLiteFrame{
-		// 	EHD1: MB_RL7023_11.ECHONETLiteEHD1ECHONETLite,
-		// 	EHD2: MB_RL7023_11.ECHONETLiteEHD2SpecifiedMessageFormat,
-		// 	TID:  [2]uint8{0x00, 0x01},
-		// 	EDATA: MB_RL7023_11.ECHONETLiteData{
-		// 		SEOJ: [3]uint8{0x05, 0xff, 0x01},
-		// 		DEOJ: [3]uint8{0x02, 0x88, 0x01},
-		// 		ESV:  MB_RL7023_11.ECHONETLiteESVGet,
-		// 		Props: []MB_RL7023_11.ECHONETPropertySet{
-		// 			{
-		// 				EPC: 0xe7,
-		// 				EDT: []uint8{},
-		// 			},
-		// 		},
-		// 	},
-		// }
-		// received, err := mb.SKSENDTO(ctx, 0x01, addr, 0x0E1A, MB_RL7023_11.SKSENDTOSecStrict, MB_RL7023_11.SKSENDTOReservedValue, frame)
-		// if err != nil {
-		// 	logger.Error("Failed to execute command: SKSENDTO", "err", err)
-		// 	os.Exit(1)
-		// }
+		logger.Info("Send command frame")
+		frame := &echonetlite.ECHONETLiteFrame{
+			EHD1: echonetlite.ECHONETLiteEHD1ECHONETLite,
+			EHD2: echonetlite.ECHONETLiteEHD2SpecifiedMessageFormat,
+			TID:  [2]uint8{0x00, 0x01},
+			EDATA: echonetlite.ECHONETLiteData{
+				SEOJ: [3]uint8{0x05, 0xff, 0x01},
+				DEOJ: [3]uint8{0x02, 0x88, 0x01},
+				ESV:  echonetlite.ECHONETLiteESVGet,
+				Props: []echonetlite.ECHONETPropertySet{
+					{
+						EPC: 0xe7,
+						EDT: []uint8{},
+					},
+				},
+			},
+		}
+		received, err := mb.SKSENDTO(ctx, 0x01, addr, 0x0E1A, MB_RL7023_11.SKSENDTOSecStrict, MB_RL7023_11.SKSENDTOReservedValue, frame.Bytes())
+		if err != nil {
+			logger.Error("Failed to execute command: SKSENDTO", "err", err)
+			os.Exit(1)
+		}
 
-		// kw, err := received.Data.InstantaneousPowerMeasurementValue()
-		// if err == nil {
-		// 	logger.Info("Instantaneous power measurement value", "kw", kw)
-		// } else {
-		// 	logger.Error("Failed to parse packet", "err", err)
-		// }
+		e, err := echonetlite.NewECHONETLiteFrame(received.Data)
+		if err != nil {
+			logger.Error("Failed to parse packet", "err", err)
+			os.Exit(1)
+		}
+
+		kw, err := e.InstantaneousPowerMeasurementValue()
+		if err == nil {
+			logger.Info("Instantaneous power measurement value", "kw", kw)
+		} else {
+			logger.Error("Failed to parse packet", "err", err)
+		}
 
 		time.Sleep(60 * time.Second)
 	}
