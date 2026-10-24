@@ -100,7 +100,7 @@ type Frame struct {
 }
 
 func NewFrame(bytes []uint8) (*Frame, error) {
-	if bytes[0] != uint8(EHD1ECHONETLite) || bytes[1] != uint8(EHD2SpecifiedMessageFormat) {
+	if len(bytes) < 12 || bytes[0] != uint8(EHD1ECHONETLite) || bytes[1] != uint8(EHD2SpecifiedMessageFormat) {
 		return nil, ErrInvalidPacket
 	}
 
@@ -118,19 +118,31 @@ func NewFrame(bytes []uint8) (*Frame, error) {
 	opc := bytes[11]
 
 	props := make([]property.Property, opc)
-	for i := 12; i < len(bytes); i += 2 {
+	i := 12
+	for n := range props {
+		if i+2 > len(bytes) {
+			return nil, ErrInvalidPacket
+		}
 		epc := bytes[i]
-		pdc := bytes[i+1]
-		edt := bytes[i+2 : i+2+int(pdc)]
+		pdc := int(bytes[i+1])
+		if i+2+pdc > len(bytes) {
+			return nil, ErrInvalidPacket
+		}
+		edt := bytes[i+2 : i+2+pdc]
+		i += 2 + pdc
+
+		// 不可応答や Get 要求では PDC が 0 になるため値を解釈しない
+		if pdc == 0 {
+			props[n] = property.NewUnknownProperty(property.RawProperty{EPC: property.EPC(epc), EDT: edt})
+			continue
+		}
 
 		parsed, err := parser.ParseProperty(e.EDATA.SEOJ, epc, edt)
 		if err != nil {
 			return nil, err
 		}
 
-		props[(i-12)/2] = parsed
-
-		i += int(pdc)
+		props[n] = parsed
 	}
 
 	e.EDATA.Properties = props

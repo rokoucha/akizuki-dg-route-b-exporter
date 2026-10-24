@@ -75,7 +75,7 @@ func NewRouteBIdentificationNumber(p property.RawProperty) (*RouteBIdentificatio
 	}
 
 	return &RouteBIdentificationNumber{
-		ManufacturerCode: string(p.EDT[1:3]),
+		ManufacturerCode: string(p.EDT[1:4]),
 		FreeArea:         string(p.EDT[4:]),
 	}, nil
 }
@@ -200,7 +200,7 @@ func NewMeasuredCumulativeAmountOfElectricEnergyNormalDirection(p property.RawPr
 const EPCUnitForCumulativeAmountOfElectricEnergy property.EPC = 0xE1
 
 type UnitForCumulativeAmountOfElectricEnergy struct {
-	Value float32
+	Value float64
 }
 
 func (u *UnitForCumulativeAmountOfElectricEnergy) ToSettable() property.RawProperty {
@@ -219,7 +219,7 @@ func NewUnitForCumulativeAmountOfElectricEnergy(p property.RawProperty) (*UnitFo
 		return nil, property.ErrInvalidPropertyData
 	}
 
-	var value float32
+	var value float64
 	switch p.EDT[0] {
 	case 0x00:
 		value = 1
@@ -425,8 +425,8 @@ func NewMeasuredInstantaneousCurrents(p property.RawProperty) (*MeasuredInstanta
 	}
 
 	return &MeasuredInstantaneousCurrents{
-		R: float32(binary.BigEndian.Uint16(p.EDT[0:2])) / 10,
-		T: float32(binary.BigEndian.Uint16(p.EDT[2:4])) / 10,
+		R: float32(int16(binary.BigEndian.Uint16(p.EDT[0:2]))) / 10,
+		T: float32(int16(binary.BigEndian.Uint16(p.EDT[2:4]))) / 10,
 	}, nil
 }
 
@@ -517,7 +517,7 @@ func NewHistoricalDataOfMeasuredCumulativeAmountOfElectricEnergy2(p property.Raw
 
 	segments := int(p.EDT[6])
 
-	if segments != len(p.EDT[7:])/4 {
+	if len(p.EDT[7:]) != segments*8 {
 		return nil, property.ErrInvalidPropertyData
 	}
 
@@ -545,8 +545,7 @@ type DayForWhichTheHistoricalDataOfMeasuredCumulativeAmountOfElectricEnergyIsToB
 }
 
 func (d *DayForWhichTheHistoricalDataOfMeasuredCumulativeAmountOfElectricEnergyIsToBeRetrieved2) ToSettable() property.RawProperty {
-	edt := []uint8{}
-	binary.BigEndian.AppendUint16(edt, uint16(d.CollectedAt.Year()))
+	edt := binary.BigEndian.AppendUint16(nil, uint16(d.CollectedAt.Year()))
 	edt = append(edt, uint8(d.CollectedAt.Month()), uint8(d.CollectedAt.Day()), uint8(d.CollectedAt.Hour()), uint8(d.CollectedAt.Minute()))
 	edt = append(edt, d.CollectionSegments)
 
@@ -598,7 +597,7 @@ func NewHistoricalDataOfMeasuredCumulativeAmountOfElectricEnergy3(p property.Raw
 
 	segments := int(p.EDT[6])
 
-	if segments != len(p.EDT[7:])/4 {
+	if len(p.EDT[7:]) != segments*8 {
 		return nil, property.ErrInvalidPropertyData
 	}
 
@@ -626,8 +625,7 @@ type DayForWhichTheHistoricalDataOfMeasuredCumulativeAmountOfElectricEnergyIsToB
 }
 
 func (d *DayForWhichTheHistoricalDataOfMeasuredCumulativeAmountOfElectricEnergyIsToBeRetrieved3) ToSettable() property.RawProperty {
-	edt := []uint8{}
-	binary.BigEndian.AppendUint16(edt, uint16(d.CollectedAt.Year()))
+	edt := binary.BigEndian.AppendUint16(nil, uint16(d.CollectedAt.Year()))
 	edt = append(edt, uint8(d.CollectedAt.Month()), uint8(d.CollectedAt.Day()), uint8(d.CollectedAt.Hour()), uint8(d.CollectedAt.Minute()))
 	edt = append(edt, d.CollectionSegments)
 
@@ -693,6 +691,6 @@ func ParseProperty(p property.RawProperty) (property.Property, error) {
 	case EPCDayForWhichTheHistoricalDataOfMeasuredCumulativeAmountOfElectricEnergyIsToBeRetrieved3:
 		return NewDayForWhichTheHistoricalDataOfMeasuredCumulativeAmountOfElectricEnergyIsToBeRetrieved3(p)
 	default:
-		return nil, property.ErrUnknownProperty
+		return property.NewUnknownProperty(p), nil
 	}
 }
