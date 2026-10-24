@@ -2,277 +2,224 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/jessevdk/go-flags"
 	"github.com/rokoucha/akizuki-dg-route-b-exporter/MB_RL7023_11"
 	"github.com/rokoucha/akizuki-dg-route-b-exporter/echonetlite"
-	"github.com/rokoucha/akizuki-dg-route-b-exporter/echonetlite/property"
-	"github.com/rokoucha/akizuki-dg-route-b-exporter/echonetlite/property/smartmeter"
+	"github.com/rokoucha/akizuki-dg-route-b-exporter/homeassistant"
 	"github.com/rokoucha/akizuki-dg-route-b-exporter/serial"
 )
 
+// スマートメーターの計測値は 1 分程度で更新されるので、それより短い間隔で問い合わせても電波を浪費するだけ
+const minPollInterval = 10 * time.Second
+
+// リリース時に ldflags で埋め込まれる
+var version = "dev"
+
 type options struct {
-	BaudRate *uint `short:"b" long:"baud-rate" description:"Baud rate to connect to Wi-SUN module, default: 115200"`
-	Scan     *bool `short:"s" long:"scan" description:"Scan for available PANs"`
-	Verbose  *bool `short:"v" long:"verbose" description:"Show verbose debug information"`
+	BaudRate uint `short:"b" long:"baud-rate" description:"Baud rate to connect to Wi-SUN module" default:"115200"`
+	Scan     bool `short:"s" long:"scan" description:"Scan for available PANs"`
+	Verbose  bool `short:"v" long:"verbose" description:"Show verbose debug information"`
+	Version  bool `short:"V" long:"version" description:"Show version"`
+
+	RouteBID       string `long:"route-b-id" env:"ROUTE_B_ID" description:"Route B ID" required:"true"`
+	RouteBPassword string `long:"route-b-password" env:"ROUTE_B_PASSWORD" description:"Route B password" required:"true"`
+	Channel        string `long:"channel" env:"ROUTE_B_CHANNEL" description:"Channel of smart meter (from --scan)"`
+	PANID          string `long:"pan-id" env:"ROUTE_B_PANID" description:"PAN ID of smart meter (from --scan)"`
+	Addr           string `long:"addr" env:"ROUTE_B_ADDR" description:"IPv6 address of smart meter (from --scan)"`
+
+	PollInterval time.Duration `long:"poll-interval" env:"POLL_INTERVAL" description:"Interval to poll smart meter" default:"60s"`
+	TxBudget     time.Duration `long:"tx-budget" env:"TX_BUDGET" description:"Self-imposed transmission time budget per hour (ARIB STD-T108 limit is 360s)" default:"180s"`
+
+	MQTTBroker          string `long:"mqtt-broker" env:"MQTT_BROKER" description:"MQTT broker URL for Home Assistant (e.g. tcp://homeassistant.local:1883)"`
+	MQTTUsername        string `long:"mqtt-username" env:"MQTT_USERNAME" description:"MQTT username"`
+	MQTTPassword        string `long:"mqtt-password" env:"MQTT_PASSWORD" description:"MQTT password"`
+	MQTTDiscoveryPrefix string `long:"mqtt-discovery-prefix" env:"MQTT_DISCOVERY_PREFIX" description:"Home Assistant MQTT discovery prefix" default:"homeassistant"`
+
+	Args struct {
+		Port string `positional-arg-name:"serial-port" required:"true"`
+	} `positional-args:"true"`
 }
 
 func main() {
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	// --version だけで実行できるよう、必須オプションの検証より前に見る
+	for _, arg := range os.Args[1:] {
+		if arg == "-V" || arg == "--version" {
+			fmt.Println(version)
+			return
+		}
+	}
+
 	var opts options
-	args, err := flags.Parse(&opts)
-	if err != nil {
-		flagsErr := err.(*flags.Error)
-		if flagsErr.Type == flags.ErrHelp {
+	if _, err := flags.Parse(&opts); err != nil {
+		if flagsErr, ok := err.(*flags.Error); ok && flagsErr.Type == flags.ErrHelp {
 			os.Exit(0)
 		}
 		os.Exit(2)
 	}
 
 	logLevel := slog.LevelInfo
-	if opts.Verbose != nil && *opts.Verbose {
+	if opts.Verbose {
 		logLevel = slog.LevelDebug
 	}
-
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: logLevel}))
 
-	if len(args) != 1 {
-		logger.Error("Please specify a serial port")
+	if err := run(ctx, opts, logger); err != nil && !errors.Is(err, context.Canceled) {
+		logger.Error("Exiting", "err", err)
 		os.Exit(1)
 	}
-	portName := args[0]
+}
 
-	var baudrate uint
-	if opts.BaudRate != nil {
-		baudrate = *opts.BaudRate
-	} else {
-		baudrate = 115200
+func run(ctx context.Context, opts options, logger *slog.Logger) error {
+	if !opts.Scan {
+		if opts.Channel == "" || opts.PANID == "" || opts.Addr == "" {
+			return errors.New("please set ROUTE_B_CHANNEL, ROUTE_B_PANID and ROUTE_B_ADDR (run with --scan to find them)")
+		}
+		if opts.PollInterval < minPollInterval {
+			return fmt.Errorf("poll interval must be at least %s", minPollInterval)
+		}
+		if opts.TxBudget <= 0 || opts.TxBudget > ARIBTransmissionLimit {
+			return fmt.Errorf("transmission time budget must be in (0, %s]", ARIBTransmissionLimit)
+		}
 	}
 
-	var scanMode bool
-	if opts.Scan != nil {
-		scanMode = *opts.Scan
-	} else {
-		scanMode = false
-	}
-
-	serial, err := serial.New(serial.Config{
-		PortName: portName,
-		BaudRate: int(baudrate),
+	s, err := serial.New(serial.Config{
+		PortName: opts.Args.Port,
+		BaudRate: int(opts.BaudRate),
 	})
 	if err != nil {
-		logger.Error("Failed to open serial port", "err", err)
-		os.Exit(1)
+		return fmt.Errorf("failed to open serial port: %w", err)
 	}
-	closer := func() {
-		serial.Close()
-	}
-	defer func() {
-		closer()
-	}()
+	defer s.Close()
+
+	// 終了時に SKTERM を送れるよう、シリアルの読み出しはシグナルとは別に止める
+	streamCtx, cancelStream := context.WithCancel(context.Background())
+	defer cancelStream()
+	ready := make(chan struct{})
+	errCh := make(chan error, 1)
+	go s.Streaming(streamCtx, ready, errCh)
+	<-ready
+
+	ctx, cancel := context.WithCancelCause(ctx)
+	defer cancel(nil)
 	go func() {
-		<-ctx.Done()
-		closer()
+		select {
+		case err := <-errCh:
+			cancel(fmt.Errorf("serial: %w", err))
+		case <-streamCtx.Done():
+		}
 	}()
 
-	listener := func(lines []string) error {
+	debugListener := func(lines []string) error {
 		for _, line := range lines {
 			logger.Debug("streaming", "line", line)
 		}
-		events := MB_RL7023_11.ParseEvent(lines)
-		for _, event := range events {
-			u, ok := event.(*MB_RL7023_11.ERXUDP)
-			if !ok {
-				continue
-			}
-			f, err := echonetlite.NewFrame(u.Data)
-			if err != nil {
-				continue
-			}
-			logger.Info("Received frame", "frame", f)
-			for _, p := range f.EDATA.Properties {
-				logger.Info("Property", "property", p)
-			}
-		}
 		return nil
 	}
-
-	serial.AddListner(&listener)
-
-	ready := make(chan struct{})
-	errCh := make(chan error)
-	go serial.Streaming(ctx, ready, errCh)
-	<-ready
+	s.AddListner(&debugListener)
 
 	mb := MB_RL7023_11.New(MB_RL7023_11.Config{
 		Logger: logger,
-		Serial: serial,
+		Serial: s,
 	})
-	err = mb.Initialize(ctx)
-	if err != nil {
-		logger.Error("Failed to initialize Wi-SUN module", "err", err)
-		os.Exit(1)
+	if err := mb.Initialize(ctx); err != nil {
+		return fmt.Errorf("failed to initialize Wi-SUN module: %w", err)
 	}
 
 	ver, err := mb.SKVER(ctx)
 	if err != nil {
-		logger.Error("Failed to execute command: SKVER", "err", err)
-		os.Exit(1)
+		return fmt.Errorf("failed to execute command: SKVER: %w", err)
 	}
 	info, err := mb.SKINFO(ctx)
 	if err != nil {
-		logger.Error("Failed to execute command: SKINFO", "err", err)
-		os.Exit(1)
+		return fmt.Errorf("failed to execute command: SKINFO: %w", err)
 	}
-	logger.Info("Wi-SUN module info", "version", ver, "info", info)
+	logger.Info("Wi-SUN module info", "version", ver, "info", info, "app_version", version)
 
-	rbid := os.Getenv("ROUTE_B_ID")
-	if rbid == "" {
-		logger.Error("Please set ROUTE_B_ID env variable")
-		os.Exit(1)
+	if err := mb.SKSETRBID(ctx, opts.RouteBID); err != nil {
+		return fmt.Errorf("failed to execute command: SKSETRBID: %w", err)
+	}
+	if err := mb.SKSETPWD(ctx, opts.RouteBPassword); err != nil {
+		return fmt.Errorf("failed to execute command: SKSETPWD: %w", err)
 	}
 
-	err = mb.SKSETRBID(ctx, rbid)
+	if opts.Scan {
+		return scan(ctx, mb, logger)
+	}
+
+	m := &meter{
+		addr:     opts.Addr,
+		channel:  opts.Channel,
+		panID:    opts.PANID,
+		interval: opts.PollInterval,
+		txBudget: opts.TxBudget,
+		logger:   logger,
+		mb:       mb,
+		pending:  map[[2]uint8]chan *echonetlite.Frame{},
+	}
+
+	if opts.MQTTBroker != "" {
+		m.ha = homeassistant.New(homeassistant.Config{
+			Broker:          opts.MQTTBroker,
+			Username:        opts.MQTTUsername,
+			Password:        opts.MQTTPassword,
+			DiscoveryPrefix: opts.MQTTDiscoveryPrefix,
+			NodeID:          info.Addr64,
+			Version:         version,
+			Logger:          logger,
+		})
+		defer m.ha.Close()
+	}
+
+	meterListener := m.listener
+	s.AddListner(&meterListener)
+
+	err = m.Run(ctx)
+	m.Close()
+	if cause := context.Cause(ctx); cause != nil && !errors.Is(cause, context.Canceled) {
+		return cause
+	}
+	return err
+}
+
+func scan(ctx context.Context, mb *MB_RL7023_11.MB_RL7023_11, logger *slog.Logger) error {
+	res, err := mb.SKSCAN(ctx, MB_RL7023_11.SKSCANModeActiveWithIE, 0xFFFFFFFF, 6, MB_RL7023_11.SKSCANReservedValue)
 	if err != nil {
-		logger.Error("Failed to execute command: SKSETRBID", "err", err)
-		os.Exit(1)
+		return fmt.Errorf("failed to execute command: SKSCAN: %w", err)
+	}
+	if len(res) == 0 {
+		logger.Info("No PANs found")
+		return nil
 	}
 
-	rbpwd := os.Getenv("ROUTE_B_PASSWORD")
-	if rbpwd == "" {
-		logger.Error("Please set ROUTE_B_PASSWORD env variable")
-		os.Exit(1)
-	}
-
-	err = mb.SKSETPWD(ctx, rbpwd)
-	if err != nil {
-		logger.Error("Failed to execute command: SKSETPWD", "err", err)
-		os.Exit(1)
-	}
-
-	if scanMode {
-		res, err := mb.SKSCAN(ctx, MB_RL7023_11.SKSCANModeActiveWithIE, 0xFFFFFFFF, 6, MB_RL7023_11.SKSCANReservedValue)
+	logger.Info("Found PANs")
+	for i, v := range res {
+		pan := v.(*MB_RL7023_11.EPANDESC)
+		ipaddr, err := mb.SKLL64(ctx, pan.Addr)
 		if err != nil {
-			logger.Error("Failed to execute command: SKSCAN", "err", err)
-			os.Exit(1)
-		}
-		var pans []*MB_RL7023_11.EPANDESC
-		for _, pan := range res {
-			pans = append(pans, pan.(*MB_RL7023_11.EPANDESC))
-		}
-		if len(pans) == 0 {
-			logger.Info("No PANs found")
-			os.Exit(0)
-		}
-		logger.Info("Found PANs")
-		for i, pan := range pans {
-			ipaddr, err := mb.SKLL64(ctx, pan.Addr)
-			if err != nil {
-				logger.Error("Failed to execute command: SKLL64", "err", err)
-				os.Exit(1)
-			}
-
-			fmt.Printf("%d:\n  Channel: %X\n  ChannelPage: %X\n  PanID: %X\n  Addr: %s\n  LQI: %X\n  Side: %X\n  PairID: %s\n\n",
-				i+1,
-				pan.Channel,
-				pan.ChannelPage,
-				pan.PanID,
-				ipaddr,
-				pan.LQI,
-				pan.Side,
-				pan.PairID,
-			)
-		}
-		os.Exit(0)
-	}
-
-	channel := os.Getenv("ROUTE_B_CHANNEL")
-	if channel == "" {
-		logger.Error("Please set ROUTE_B_CHANNEL env variable")
-		os.Exit(1)
-	}
-
-	_, err = mb.SKSREG(ctx, MB_RL7023_11.RegisterChannel, channel)
-	if err != nil {
-		logger.Error("Failed to execute command: SKSREG", "err", err)
-		os.Exit(1)
-	}
-
-	panid := os.Getenv("ROUTE_B_PANID")
-	if panid == "" {
-		logger.Error("Please set ROUTE_B_PANID env variable")
-		os.Exit(1)
-	}
-
-	_, err = mb.SKSREG(ctx, MB_RL7023_11.RegisterPANID, panid)
-	if err != nil {
-		logger.Error("Failed to execute command: SKSREG", "err", err)
-		os.Exit(1)
-	}
-
-	addr := os.Getenv("ROUTE_B_ADDR")
-	if addr == "" {
-		logger.Error("Please set ROUTE_B_ADDR env variable")
-		os.Exit(1)
-	}
-
-	logger.Info("Joining to PAN", "addr", addr)
-	err = mb.SKJOIN(ctx, addr)
-	if err != nil {
-		logger.Error("Failed to execute command: SKJOIN", "err", err)
-		os.Exit(1)
-	}
-
-	closer = func() {
-		ctx := context.Background()
-		err = mb.SKTERM(ctx)
-		if err != nil {
-			logger.Error("Failed to execute command: SKTERM", "err", err)
-			os.Exit(1)
-		}
-		logger.Info("Disconnected from", "addr", addr)
-
-		serial.Close()
-	}
-
-	for {
-		logger.Info("Send command frame")
-
-		frame := &echonetlite.Frame{
-			EHD1: echonetlite.EHD1ECHONETLite,
-			EHD2: echonetlite.EHD2SpecifiedMessageFormat,
-			TID:  [2]uint8{0x00, 0x01},
-			EDATA: echonetlite.Data{
-				SEOJ: [3]uint8{0x05, 0xff, 0x01},
-				DEOJ: [3]uint8{0x02, 0x88, 0x01},
-				ESV:  echonetlite.ESVGet,
-				Properties: []property.Property{
-					&smartmeter.MeasuredInstantaneousElectricPower{},
-				},
-			},
-		}
-		received, err := mb.SKSENDTO(ctx, 0x01, addr, 0x0E1A, MB_RL7023_11.SKSENDTOSecStrict, MB_RL7023_11.SKSENDTOReservedValue, frame.Bytes())
-		if err != nil {
-			logger.Error("Failed to execute command: SKSENDTO", "err", err)
-			os.Exit(1)
+			return fmt.Errorf("failed to execute command: SKLL64: %w", err)
 		}
 
-		e, err := echonetlite.NewFrame(received.Data)
-		if err != nil {
-			logger.Error("Failed to parse packet", "err", err)
-			os.Exit(1)
-		}
-
-		kw := e.EDATA.Properties[0].(*smartmeter.MeasuredInstantaneousElectricPower).Value
-		logger.Info("Instantaneous power measurement value", "kw", kw)
-
-		time.Sleep(60 * time.Second)
+		fmt.Printf("%d:\n  Channel: %X\n  ChannelPage: %X\n  PanID: %X\n  Addr: %s\n  LQI: %X\n  Side: %X\n  PairID: %s\n\n",
+			i+1,
+			pan.Channel,
+			pan.ChannelPage,
+			pan.PanID,
+			ipaddr,
+			pan.LQI,
+			pan.Side,
+			pan.PairID,
+		)
 	}
+	return nil
 }

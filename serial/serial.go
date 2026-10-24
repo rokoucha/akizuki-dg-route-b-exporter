@@ -3,7 +3,10 @@ package serial
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/albenik/go-serial/v2"
@@ -17,8 +20,9 @@ var (
 
 type Serial struct {
 	listners  []*func(lines []string) error
+	mu        sync.Mutex
 	port      *serial.Port
-	streaming bool
+	streaming atomic.Bool
 }
 
 type Config struct {
@@ -39,10 +43,14 @@ func New(c Config) (*Serial, error) {
 }
 
 func (s *Serial) AddListner(l *func(lines []string) error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.listners = append(s.listners, l)
 }
 
 func (s *Serial) RemoveListner(l *func(lines []string) error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	for i, listner := range s.listners {
 		if listner == l {
 			s.listners = append(s.listners[:i], s.listners[i+1:]...)
@@ -52,16 +60,12 @@ func (s *Serial) RemoveListner(l *func(lines []string) error) {
 }
 
 func (s *Serial) Streaming(ctx context.Context, ready chan struct{}, errCh chan error) {
-	if s.streaming {
+	if !s.streaming.CompareAndSwap(false, true) {
 		errCh <- ErrAlreadyStreaming
 		return
 	}
+	defer s.streaming.Store(false)
 
-	defer func() {
-		s.streaming = false
-	}()
-
-	s.streaming = true
 	ready <- struct{}{}
 
 	buff := make([]uint8, 255)
@@ -97,7 +101,10 @@ func (s *Serial) Streaming(ctx context.Context, ready chan struct{}, errCh chan 
 			continue
 		}
 
-		for _, listner := range s.listners {
+		s.mu.Lock()
+		listners := slices.Clone(s.listners)
+		s.mu.Unlock()
+		for _, listner := range listners {
 			err := (*listner)(strings.Split(strings.TrimSuffix(data, "\r\n"), "\r\n"))
 			if err != nil {
 				errCh <- err
@@ -120,25 +127,29 @@ func (s *Serial) Write(p []uint8) (n int, err error) {
 }
 
 func (s *Serial) Exec(ctx context.Context, command []uint8, stopper func(l []string) bool) ([]string, error) {
-	if !s.streaming {
+	if !s.streaming.Load() {
 		return []string{}, ErrNotStreaming
 	}
 
 	done := make(chan struct{})
 	lines := []string{}
+	// リスナーは Streaming の goroutine から順に呼ばれるので、完了後は lines に触れない
+	finished := false
 
 	listener := func(l []string) error {
-		if len(l) == 0 {
+		if finished || len(l) == 0 {
 			return nil
 		}
 		if stopper == nil {
 			if len(l) == 1 && l[0] == "" {
+				finished = true
 				close(done)
 				return nil
 			}
 		} else {
 			if stopper(l) {
 				lines = append(lines, l...)
+				finished = true
 				close(done)
 				return nil
 			}
@@ -151,6 +162,7 @@ func (s *Serial) Exec(ctx context.Context, command []uint8, stopper func(l []str
 
 	_, err := s.port.Write(command)
 	if err != nil {
+		s.RemoveListner(&listener)
 		return []string{}, err
 	}
 

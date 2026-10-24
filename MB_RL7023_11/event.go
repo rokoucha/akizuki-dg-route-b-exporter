@@ -510,6 +510,13 @@ const (
 	EVENTNumTransmissionRateLimitReleased   EVENTNum = 0x33
 )
 
+// EVENT 21 の結果
+const (
+	EVENTUDPSentSuccess              = "00"
+	EVENTUDPSentFailure              = "01"
+	EVENTUDPSentNeighborSolicitation = "02"
+)
+
 func (e EVENTNum) String() string {
 	return fmt.Sprintf("EVENT %02X", uint8(e))
 }
@@ -529,6 +536,10 @@ func NewEVENT(line string) (*EVENT, error) {
 		return nil, err
 	}
 
+	param := ""
+	if len(fields) > 2 {
+		param = fields[2]
+	}
 	payload := ""
 	if len(fields) > 3 {
 		payload = fields[3]
@@ -537,9 +548,18 @@ func NewEVENT(line string) (*EVENT, error) {
 	return &EVENT{
 		Num:     EVENTNum(num),
 		Sender:  fields[1],
-		Param:   fields[2],
+		Param:   param,
 		Payload: payload,
 	}, nil
+}
+
+// イベント固有の引数のうち末尾のもの
+// BP35A1 は <SENDER> <PARAM> だが、ERXUDP と同様に予約フィールドが挟まる場合があるため末尾を見る
+func (e *EVENT) Result() string {
+	if e.Payload != "" {
+		return e.Payload
+	}
+	return e.Param
 }
 
 // SKSREG
@@ -641,8 +661,6 @@ func ParseEvent(l []string) []any {
 			e, err := NewERXUDP(l[i])
 			if err == nil {
 				events = append(events, e)
-			} else {
-				fmt.Printf("ERXUDP error: %#v\n", err)
 			}
 			i++
 			continue

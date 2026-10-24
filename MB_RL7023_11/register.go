@@ -30,7 +30,7 @@ const (
 	// 送信時間制限中フラグ R 0 0 or 1 ×
 	RegisterTransmissionRateLimitExceeded Register = 0xfb
 	// 無線送信の積算時間（単位ミリ秒） R(0 のみ書き込み可能) 0 0x0 – 0xFFFFFFFFFFFFFFFF ×
-	RegisterTransmissionSunTime Register = 0xfd
+	RegisterTransmissionSumTime Register = 0xfd
 	// エコーバックフラグ R/W 1 0 or 1 ×
 	RegisterEchoback Register = 0xfe
 	// オートロード R/W 0 0 or 1 ○

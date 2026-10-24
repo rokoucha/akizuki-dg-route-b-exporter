@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -23,7 +24,10 @@ var (
 	ErrExecFailed        = errors.New("exec failed")
 	ErrFailedToConnect   = errors.New("failed to connect")
 	ErrPortUnavaiable    = errors.New("port unavaiable")
+	ErrSendFailed        = errors.New("send failed")
 	ErrUnexpectedOutput  = errors.New("unexpected output")
+	// ARIB STD-T108 の送信総和時間 (1時間あたり360秒) の制限中で送信がキャンセルされた
+	ErrTransmissionRateLimited = errors.New("transmission rate limited")
 )
 
 type MB_RL7023_11 struct {
@@ -304,7 +308,8 @@ const (
 	SKSENDTOReservedValue SKSENDTOReserved = 0x00
 )
 
-func (m *MB_RL7023_11) erxudpMatcher(received *ERXUDP, handle uint8, ipaddr string, port uint16) bool {
+// 受信した UDP が指定した相手・ポートからの自端末宛ての応答か
+func (m *MB_RL7023_11) IsResponse(received *ERXUDP, handle uint8, ipaddr string, port uint16) bool {
 	// sender mismatch
 	if received.Sender != ipaddr {
 		m.logger.Debug("sender mismatch", "expected", ipaddr, "actual", received.Sender)
@@ -324,8 +329,8 @@ func (m *MB_RL7023_11) erxudpMatcher(received *ERXUDP, handle uint8, ipaddr stri
 	}
 
 	// destination port mismatch
-	if received.Lport != m.ports[handle-1] {
-		m.logger.Debug("destination port mismatch", "expected", m.ports[handle-1], "actual", received.Lport)
+	if int(handle) > len(m.ports) || received.Lport != m.ports[handle-1] {
+		m.logger.Debug("destination port mismatch", "handle", handle, "actual", received.Lport)
 		return false
 	}
 
@@ -333,13 +338,14 @@ func (m *MB_RL7023_11) erxudpMatcher(received *ERXUDP, handle uint8, ipaddr stri
 }
 
 // 指定した宛先に UDP でデータを送信します。
-func (m *MB_RL7023_11) SKSENDTO(ctx context.Context, handle uint8, ipaddr string, port uint16, sec SKSENDTOSec, reserved SKSENDTOReserved, payload []uint8) (*ERXUDP, error) {
+// 送信完了 (EVENT 21) まで待ち、応答の受信は呼び出し側でリスナーを使って行います。
+func (m *MB_RL7023_11) SKSENDTO(ctx context.Context, handle uint8, ipaddr string, port uint16, sec SKSENDTOSec, reserved SKSENDTOReserved, payload []uint8) error {
 	if len(m.addrs) == 0 {
-		return nil, ErrAddressUnavaiable
+		return ErrAddressUnavaiable
 	}
 
 	if len(m.ports) == 0 || len(m.ports) < int(handle) {
-		return nil, ErrPortUnavaiable
+		return ErrPortUnavaiable
 	}
 
 	command := fmt.Sprintf(
@@ -351,33 +357,64 @@ func (m *MB_RL7023_11) SKSENDTO(ctx context.Context, handle uint8, ipaddr string
 		reserved,
 		len(payload),
 	)
+	// EVENT 21 の結果が 02 (アドレス要請) の場合は自動で再送されるので、成功か失敗が出るまで待つ
 	stopper := func(l []string) bool {
 		return slices.ContainsFunc(l, func(s string) bool {
-			if !strings.HasPrefix(s, ERXUDP_ID) {
-				return false
-			}
-			e, err := NewERXUDP(s)
+			e, err := NewEVENT(s)
 			if err != nil {
 				return false
 			}
-
-			return m.erxudpMatcher(e, handle, ipaddr, port)
+			return e.Num == EVENTNumTransmissionRateLimitExceeded ||
+				(e.Num == EVENTNumUDPSent && e.Result() != EVENTUDPSentNeighborSolicitation)
 		})
 	}
 	res, events, err := m.exec(ctx, command, execOptions{Payload: payload, Stopper: stopper, Timeout: execTimeout * 2 * time.Second})
 	if err != nil {
-		return nil, parseError(res, err)
+		return parseError(res, err)
 	}
 
 	for _, v := range events {
-		if e, ok := v.(*ERXUDP); ok {
-			if m.erxudpMatcher(e, handle, ipaddr, port) {
-				return e, nil
-			}
+		e, ok := v.(*EVENT)
+		if !ok {
+			continue
+		}
+		switch {
+		case e.Num == EVENTNumTransmissionRateLimitExceeded:
+			return ErrTransmissionRateLimited
+		case e.Num == EVENTNumUDPSent && e.Result() == EVENTUDPSentSuccess:
+			return nil
+		case e.Num == EVENTNumUDPSent && e.Result() == EVENTUDPSentFailure:
+			return ErrSendFailed
 		}
 	}
 
-	return nil, ErrUnexpectedOutput
+	return ErrUnexpectedOutput
+}
+
+// ARIB STD-T108 の送信総和時間の制限中かを返します。
+func (m *MB_RL7023_11) IsTransmissionRateLimited(ctx context.Context) (bool, error) {
+	res, err := m.SKSREG(ctx, RegisterTransmissionRateLimitExceeded, "")
+	if err != nil {
+		return false, err
+	}
+	flag, err := strconv.ParseUint(res.Val, 16, 8)
+	if err != nil {
+		return false, err
+	}
+	return flag != 0, nil
+}
+
+// 無線送信の積算時間を返します。
+func (m *MB_RL7023_11) TransmissionSumTime(ctx context.Context) (time.Duration, error) {
+	res, err := m.SKSREG(ctx, RegisterTransmissionSumTime, "")
+	if err != nil {
+		return 0, err
+	}
+	ms, err := strconv.ParseUint(res.Val, 16, 64)
+	if err != nil {
+		return 0, err
+	}
+	return time.Duration(ms) * time.Millisecond, nil
 }
 
 // 指定した宛先に TCP の接続要求を発行します。
@@ -644,7 +681,13 @@ func (m *MB_RL7023_11) SKRFLO(ctx context.Context, mode uint8) error {
 // MAC アドレス(64bit)から IPv6 リンクローカルアドレスへ変換した結果を表示します。
 func (m *MB_RL7023_11) SKLL64(ctx context.Context, addr64 string) (string, error) {
 	res, _, err := m.exec(ctx, "SKLL64 "+addr64)
-	return res[0], parseError(res, err)
+	if err != nil {
+		return "", parseError(res, err)
+	}
+	if len(res) == 0 {
+		return "", ErrUnexpectedOutput
+	}
+	return res[0], nil
 }
 
 // (not supported) ERXUDP、ERXTCP のデータ部の表示形式を設定します。
