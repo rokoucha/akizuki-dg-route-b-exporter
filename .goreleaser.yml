@@ -1,0 +1,30 @@
+version: 2
+
+project_name: akizuki-dg-route-b-exporter
+
+before:
+  hooks:
+    - go test ./...
+
+builds:
+  - binary: akizuki-dg-route-b-exporter
+    env:
+      - CGO_ENABLED=0
+    # 秋月電子の Wi-SUN 搭載 Linux ボード (armv7l) 向け
+    goos: [linux]
+    goarch: [arm]
+    goarm: ["7"]
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+
+archives:
+  - formats: [tar.gz]
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}v{{ .Arm }}
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  sort: asc
