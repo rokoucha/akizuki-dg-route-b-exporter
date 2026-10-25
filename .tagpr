@@ -1,6 +1,6 @@
 [tagpr]
 	releaseBranch = main
-	versionFile = -
+	versionFile = main.go
 	vPrefix = true
 	changelog = true
 	release = false
