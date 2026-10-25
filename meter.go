@@ -344,6 +344,9 @@ func (m *meter) poll(ctx context.Context) error {
 		case *smartmeter.MeasuredInstantaneousElectricPower:
 			values["power"] = v.Value
 		case *smartmeter.MeasuredInstantaneousCurrents:
+			if m.ha != nil {
+				m.ha.SetCurrentPhases(v.R != nil, v.T != nil)
+			}
 			if v.R != nil {
 				values["current_r"] = *v.R
 			}
@@ -359,6 +362,9 @@ func (m *meter) poll(ctx context.Context) error {
 		case *smartmeter.UnitForCumulativeAmountOfElectricEnergy:
 			m.unit = v.Value
 		case *property.UnknownProperty:
+			if v.EPC == smartmeter.EPCMeasuredInstantaneousCurrents && m.ha != nil {
+				m.ha.SetCurrentPhases(false, false)
+			}
 			// 係数 (D3) は任意プロパティで、無い場合は 1 とみなす
 			if v.EPC == smartmeter.EPCCoefficient {
 				m.coefficient = 1
