@@ -26,7 +26,7 @@ func TestNewFrameMultipleProperties(t *testing.T) {
 		t.Errorf("power = %d", v)
 	}
 	c := f.EDATA.Properties[1].(*smartmeter.MeasuredInstantaneousCurrents)
-	if c.R != 12.3 || c.T != -4.5 {
+	if c.R == nil || *c.R != 12.3 || c.T == nil || *c.T != -4.5 {
 		t.Errorf("currents = %+v", c)
 	}
 	if v := f.EDATA.Properties[2].(*smartmeter.UnitForCumulativeAmountOfElectricEnergy).Value; v != 0.1 {
