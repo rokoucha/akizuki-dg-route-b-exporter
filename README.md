@@ -21,7 +21,7 @@ go run . /dev/ttyUSB0
 
 ## Home Assistant
 
-[MQTT 統合](https://www.home-assistant.io/integrations/mqtt/)を設定しておくと、MQTT Discovery で「スマートメーター」デバイスが自動で追加される。
+[MQTT 統合](https://www.home-assistant.io/integrations/mqtt/)を設定しておくと、電流プロパティの初回応答後にMQTT Discoveryで「スマートメーター」デバイスが自動で追加される。計測値なし（`0x7FFE`）の相はDiscoveryにも含めない。
 
 | エンティティ             | 単位 | 備考                                                 |
 | ------------------------ | ---- | ---------------------------------------------------- |

@@ -56,8 +56,11 @@ type Client struct {
 	nodeID          string
 	version         string
 
-	mu        sync.Mutex
-	available bool
+	mu                 sync.Mutex
+	available          bool
+	currentPhasesKnown bool
+	currentR           bool
+	currentT           bool
 }
 
 func New(c Config) *Client {
@@ -117,9 +120,18 @@ func (h *Client) publish(topic string, retained bool, payload any) mqtt.Token {
 	return t
 }
 
+// 初回応答までは、非対応の相を一時的に登録しないよう Discovery を待つ。
 func (h *Client) publishDiscovery() error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if !h.currentPhasesKnown {
+		return nil
+	}
 	components := map[string]map[string]any{}
 	for _, s := range Sensors {
+		if (s.Key == "current_r" && !h.currentR) || (s.Key == "current_t" && !h.currentT) {
+			continue
+		}
 		c := map[string]any{
 			"p":           s.Platform,
 			"name":        s.Name,
@@ -164,6 +176,19 @@ func (h *Client) publishDiscovery() error {
 
 	h.publish(fmt.Sprintf("%s/device/%s/config", h.discoveryPrefix, h.nodeID), true, payload)
 	return nil
+}
+
+// 電流プロパティの応答から、計測できる相だけを Discovery に含める。
+func (h *Client) SetCurrentPhases(r, t bool) {
+	h.mu.Lock()
+	changed := !h.currentPhasesKnown || h.currentR != r || h.currentT != t
+	h.currentPhasesKnown, h.currentR, h.currentT = true, r, t
+	h.mu.Unlock()
+	if changed {
+		if err := h.publishDiscovery(); err != nil {
+			h.logger.Error("Failed to build discovery payload", "err", err)
+		}
+	}
 }
 
 func (h *Client) publishAvailability(available bool) mqtt.Token {
