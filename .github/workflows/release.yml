@@ -7,6 +7,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  actions: write
   issues: read
 
 jobs:
@@ -29,6 +30,13 @@ jobs:
         uses: Songmu/tagpr@1fcd7292d1fe8ea9a8313eef46b8d80b7a15d227 # v1.21.3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Run CI on release PR
+        if: steps.tagpr.outputs.pull_request != ''
+        run: gh workflow run ci.yml --ref "$BRANCH"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          BRANCH: ${{ fromJSON(steps.tagpr.outputs.pull_request).head.ref }}
       - name: Check out release tag
         if: steps.tagpr.outputs.tag != ''
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
