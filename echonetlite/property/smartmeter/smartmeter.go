@@ -404,8 +404,9 @@ func NewMeasuredInstantaneousElectricPower(p property.RawProperty) (*MeasuredIns
 const EPCMeasuredInstantaneousCurrents property.EPC = 0xE8
 
 type MeasuredInstantaneousCurrents struct {
-	R float32
-	T float32
+	// 単相2線式では T相が計測されないので nil になる
+	R *float32
+	T *float32
 }
 
 func (m *MeasuredInstantaneousCurrents) ToSettable() property.RawProperty {
@@ -425,9 +426,19 @@ func NewMeasuredInstantaneousCurrents(p property.RawProperty) (*MeasuredInstanta
 	}
 
 	return &MeasuredInstantaneousCurrents{
-		R: float32(int16(binary.BigEndian.Uint16(p.EDT[0:2]))) / 10,
-		T: float32(int16(binary.BigEndian.Uint16(p.EDT[2:4]))) / 10,
+		R: parseCurrent(p.EDT[0:2]),
+		T: parseCurrent(p.EDT[2:4]),
 	}, nil
+}
+
+// 0x7FFE は計測値なしを表す
+func parseCurrent(b []uint8) *float32 {
+	v := int16(binary.BigEndian.Uint16(b))
+	if v == 0x7FFE {
+		return nil
+	}
+	f := float32(v) / 10
+	return &f
 }
 
 // 定時積算電力量計測値(正方向計測値)

@@ -31,3 +31,14 @@ func TestDayForWhichTheHistoricalDataOfMeasuredCumulativeAmountOfElectricEnergyI
 		t.Errorf("EDT = % X, want % X", got, want)
 	}
 }
+
+func TestMeasuredInstantaneousCurrentsSinglePhase(t *testing.T) {
+	// 単相2線式: R=6.0A, T=計測値なし
+	c, err := NewMeasuredInstantaneousCurrents(property.RawProperty{EPC: EPCMeasuredInstantaneousCurrents, EDT: []uint8{0x00, 0x3C, 0x7F, 0xFE}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.R == nil || *c.R != 6 || c.T != nil {
+		t.Errorf("currents = R:%v T:%v", c.R, c.T)
+	}
+}

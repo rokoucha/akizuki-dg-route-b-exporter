@@ -344,8 +344,12 @@ func (m *meter) poll(ctx context.Context) error {
 		case *smartmeter.MeasuredInstantaneousElectricPower:
 			values["power"] = v.Value
 		case *smartmeter.MeasuredInstantaneousCurrents:
-			values["current_r"] = v.R
-			values["current_t"] = v.T
+			if v.R != nil {
+				values["current_r"] = *v.R
+			}
+			if v.T != nil {
+				values["current_t"] = *v.T
+			}
 		case *smartmeter.MeasuredCumulativeAmountOfElectricEnergyNormalDirection:
 			normal = &v.Value
 		case *smartmeter.MeasuredCumulativeAmountOfElectricEnergyReverseDirection:
