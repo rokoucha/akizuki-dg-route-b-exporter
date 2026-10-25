@@ -21,7 +21,7 @@ import (
 const minPollInterval = 10 * time.Second
 
 // tagpr がリリース PR で更新する
-const version = "0.0.1"
+const version = "0.0.2"
 
 type options struct {
 	BaudRate uint `short:"b" long:"baud-rate" description:"Baud rate to connect to Wi-SUN module" default:"115200"`
