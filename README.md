@@ -42,6 +42,4 @@ go run . /dev/ttyUSB0
 
 Copyright (c) 2026 Rokoucha
 
-Licensed under the Apache License, Version 2.0.
-
-Mahiron's logo is licensed under a Creative Commons Attribution-ShareAlike 4.0 International License.
+Licensed under the MIT License
