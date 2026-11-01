@@ -16,6 +16,7 @@ import (
 
 const (
 	execTimeout = 5
+	panaTimeout = time.Minute
 )
 
 var (
@@ -134,11 +135,12 @@ func (m *MB_RL7023_11) exec(ctx context.Context, command string, options ...exec
 		if o.Stopper != nil {
 			return o.Stopper(l)
 		}
-		return len(l) == 1 && l[0] == ""
+		return slices.Contains(l, "OK")
 	}
 
 	res, err := m.serial.Exec(ctx, cmd, stopper)
 	if err != nil {
+		m.logger.Warn("Wi-SUN command did not complete", "command", strings.Fields(command)[0], "timeout", o.Timeout, "err", err)
 		return nil, nil, err
 	}
 
@@ -221,7 +223,7 @@ func (m *MB_RL7023_11) SKJOIN(ctx context.Context, ipaddr string) error {
 		EVENTNumPANAConnectionFailed.String(),
 		EVENTNumPANAConnected.String(),
 	})
-	res, events, err := m.exec(ctx, "SKJOIN "+ipaddr, execOptions{Stopper: stopper, Timeout: execTimeout * 2 * time.Second})
+	res, events, err := m.exec(ctx, "SKJOIN "+ipaddr, execOptions{Stopper: stopper, Timeout: panaTimeout})
 	if err != nil {
 		return parseError(res, err)
 	}
@@ -246,7 +248,7 @@ func (m *MB_RL7023_11) SKREJOIN(ctx context.Context) error {
 		EVENTNumPANAConnectionFailed.String(),
 		EVENTNumPANAConnected.String(),
 	})
-	res, events, err := m.exec(ctx, "SKREJOIN", execOptions{Stopper: stopper, Timeout: execTimeout * 2 * time.Second})
+	res, events, err := m.exec(ctx, "SKREJOIN", execOptions{Stopper: stopper, Timeout: panaTimeout})
 	if err != nil {
 		return parseError(res, err)
 	}

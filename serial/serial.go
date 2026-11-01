@@ -3,6 +3,7 @@ package serial
 import (
 	"context"
 	"errors"
+	"io"
 	"slices"
 	"strings"
 	"sync"
@@ -21,7 +22,7 @@ var (
 type Serial struct {
 	listners  []*func(lines []string) error
 	mu        sync.Mutex
-	port      *serial.Port
+	port      io.ReadWriteCloser
 	streaming atomic.Bool
 }
 
@@ -70,7 +71,6 @@ func (s *Serial) Streaming(ctx context.Context, ready chan struct{}, errCh chan 
 
 	buff := make([]uint8, 255)
 	data := ""
-	olddata := ""
 	emptyCount := 0
 	for {
 		select {
@@ -96,8 +96,8 @@ func (s *Serial) Streaming(ctx context.Context, ready chan struct{}, errCh chan 
 
 		emptyCount++
 
-		if emptyCount < 5 || data == olddata || strings.HasSuffix(data, "\r") {
-			time.Sleep(2 * time.Duration(emptyCount) * time.Millisecond)
+		if emptyCount < 5 || data == "" || !strings.HasSuffix(data, "\r\n") {
+			time.Sleep(2 * time.Duration(min(emptyCount, 5)) * time.Millisecond)
 			continue
 		}
 
@@ -112,7 +112,6 @@ func (s *Serial) Streaming(ctx context.Context, ready chan struct{}, errCh chan 
 			}
 		}
 
-		olddata = data
 		data = ""
 		emptyCount = 0
 	}
