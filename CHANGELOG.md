@@ -1,5 +1,11 @@
 # Changelog
 
+## [v1.0.2](https://github.com/rokoucha/akizuki-dg-route-b-exporter/compare/v1.0.1...v1.0.2) - 2026-11-01
+
+- Update Songmu/tagpr action to v1.21.4 by @renovate[bot] in https://github.com/rokoucha/akizuki-dg-route-b-exporter/pull/9
+- run CI on tagpr release PR via workflow_dispatch by @rokoucha in https://github.com/rokoucha/akizuki-dg-route-b-exporter/pull/6
+- PAN参加失敗後の復旧処理と診断ログを追加 by @rokoucha in https://github.com/rokoucha/akizuki-dg-route-b-exporter/pull/11
+
 ## [v1.0.1](https://github.com/rokoucha/akizuki-dg-route-b-exporter/compare/v1.0.0...v1.0.1) - 2026-10-25
 
 - Discover only supported instantaneous current phases by @rokoucha in https://github.com/rokoucha/akizuki-dg-route-b-exporter/pull/7
