@@ -3,6 +3,12 @@ name: Release
 on:
   push:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to build and publish
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -16,6 +22,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.tag) || github.ref }}
           fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -27,11 +34,12 @@ jobs:
           go test -race ./...
           go vet ./...
       - id: tagpr
+        if: github.event_name == 'push'
         uses: Songmu/tagpr@e1250d6c84e4425db82b5e90549d62dfe23e9ebe # v1.21.4
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Run CI on release PR
-        if: steps.tagpr.outputs.pull_request != ''
+        if: steps.tagpr.outputs.tag == '' && steps.tagpr.outputs.pull_request != ''
         run: gh workflow run ci.yml --ref "$BRANCH"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -45,7 +53,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
-        if: steps.tagpr.outputs.tag != ''
+        if: inputs.tag != '' || steps.tagpr.outputs.tag != ''
         with:
           distribution: goreleaser
           version: "~> v2"
