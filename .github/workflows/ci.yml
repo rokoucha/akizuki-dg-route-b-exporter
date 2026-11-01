@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
   pull_request:
+  # GITHUB_TOKEN で push された tagpr の PR では pull_request の CI が承認待ちになるので、Release から起動する
+  workflow_dispatch:
 
 permissions:
   contents: read
