@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"math"
 	"sync"
@@ -60,11 +61,13 @@ type meter struct {
 	mu          sync.Mutex
 	pending     map[[2]uint8]chan *echonetlite.Frame
 
-	joined      bool
-	tid         uint16
-	coefficient float64
-	unit        float64
-	txSamples   []txSample
+	reinitialize func(context.Context) error
+	needsReset   bool
+	joined       bool
+	tid          uint16
+	coefficient  float64
+	unit         float64
+	txSamples    []txSample
 }
 
 // シリアルから流れてくる非同期イベントを処理します。
@@ -72,7 +75,10 @@ func (m *meter) listener(lines []string) error {
 	for _, event := range MB_RL7023_11.ParseEvent(lines) {
 		switch e := event.(type) {
 		case *MB_RL7023_11.EVENT:
+			m.logger.Debug("Wi-SUN event", "event", e.Num, "sender", e.Sender, "param", e.Param, "payload", e.Payload)
 			switch e.Num {
+			case MB_RL7023_11.EVENTNumPANAConnectionFailed, MB_RL7023_11.EVENTNumPANAConnected:
+				m.logger.Info("PANA connection result", "event", e.Num, "sender", e.Sender)
 			case MB_RL7023_11.EVENTNumTransmissionRateLimitExceeded:
 				m.logger.Warn("ARIB STD-T108 transmission time limit exceeded, transmissions are suspended")
 				m.rateLimited.Store(true)
@@ -168,6 +174,14 @@ func (m *meter) disconnected() {
 }
 
 func (m *meter) join(ctx context.Context) error {
+	if m.needsReset {
+		m.logger.Info("Reinitializing Wi-SUN module after failed PAN join")
+		if err := m.reinitialize(ctx); err != nil {
+			return fmt.Errorf("reinitialize Wi-SUN module: %w", err)
+		}
+		m.needsReset = false
+		m.sessionLost.Store(false)
+	}
 	if ok, err := m.canTransmit(ctx); err != nil || !ok {
 		return errors.Join(MB_RL7023_11.ErrTransmissionRateLimited, err)
 	}
@@ -180,7 +194,11 @@ func (m *meter) join(ctx context.Context) error {
 	}
 
 	m.logger.Info("Joining to PAN", "addr", m.addr)
+	started := time.Now()
 	if err := m.mb.SKJOIN(ctx, m.addr); err != nil {
+		// 参加失敗後は内部状態を初期化してから再試行する。
+		m.needsReset = true
+		m.logger.Warn("PAN join failed", "elapsed", time.Since(started), "err", err)
 		return err
 	}
 	m.logger.Info("Joined to PAN", "addr", m.addr)

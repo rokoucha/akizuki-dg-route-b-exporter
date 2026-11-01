@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -84,6 +86,10 @@ func run(ctx context.Context, opts options, logger *slog.Logger) error {
 		if opts.Channel == "" || opts.PANID == "" || opts.Addr == "" {
 			return errors.New("please set ROUTE_B_CHANNEL, ROUTE_B_PANID and ROUTE_B_ADDR (run with --scan to find them)")
 		}
+		channel, err := strconv.ParseUint(opts.Channel, 16, 8)
+		if err != nil || channel < 0x21 || channel > 0x3c {
+			return errors.New("channel must be a hexadecimal value in [21, 3C]")
+		}
 		if opts.PollInterval < minPollInterval {
 			return fmt.Errorf("poll interval must be at least %s", minPollInterval)
 		}
@@ -121,6 +127,9 @@ func run(ctx context.Context, opts options, logger *slog.Logger) error {
 
 	debugListener := func(lines []string) error {
 		for _, line := range lines {
+			if strings.HasPrefix(line, "SKSETPWD ") || strings.HasPrefix(line, "SKSETRBID ") || strings.HasPrefix(line, "SKSETPSK ") || strings.HasPrefix(line, "SKSETKEY ") {
+				line = strings.Fields(line)[0] + " [redacted]"
+			}
 			logger.Debug("streaming", "line", line)
 		}
 		return nil
@@ -165,6 +174,22 @@ func run(ctx context.Context, opts options, logger *slog.Logger) error {
 		logger:   logger,
 		mb:       mb,
 		pending:  map[[2]uint8]chan *echonetlite.Frame{},
+		reinitialize: func(ctx context.Context) error {
+			if err := mb.Initialize(ctx); err != nil {
+				return err
+			}
+			if err := mb.SKSETRBID(ctx, opts.RouteBID); err != nil {
+				return err
+			}
+			if err := mb.SKSETPWD(ctx, opts.RouteBPassword); err != nil {
+				return err
+			}
+			// 接続設定の書き戻しだけで復旧しない状態に備え、設定チャネルを再探索する。
+			channel, _ := strconv.ParseUint(opts.Channel, 16, 8)
+			logger.Info("Scanning configured channel before PAN retry", "channel", opts.Channel)
+			_, err := mb.SKSCAN(ctx, MB_RL7023_11.SKSCANModeActiveWithIE, uint32(1)<<(channel-0x21), 6, MB_RL7023_11.SKSCANReservedValue)
+			return err
+		},
 	}
 
 	if opts.MQTTBroker != "" {
