@@ -19,19 +19,6 @@ export MQTT_BROKER=tcp://homeassistant.local:1883 MQTT_USERNAME=... MQTT_PASSWOR
 go run . /dev/ttyUSB0
 ```
 
-## 接続失敗の調査
-
-`--verbose` を付けるとシリアル受信とイベントの詳細を出力する。認証設定コマンドのエコーは伏せて記録する。
-PAN参加は最大60秒待機し、失敗後はバックオフしてモジュールと認証設定を初期化し、設定チャネルを再スキャンしてから再試行する。
-再スキャンは認証停滞からの復旧策で、内部原因は未特定。接続先のチャネル・PAN ID・アドレスは自動変更しない。
-`PANA connection result` の `EVENT 24` は参加失敗、`EVENT 25` は参加成功を示す。
-
-systemdのログは行末を省略せず取得する。
-
-```sh
-journalctl -u route-b-exporter -b -o cat --no-pager
-```
-
 ## Home Assistant
 
 [MQTT 統合](https://www.home-assistant.io/integrations/mqtt/)を設定しておくと、電流プロパティの初回応答後にMQTT Discoveryで「スマートメーター」デバイスが自動で追加される。計測値なし（`0x7FFE`）の相はDiscoveryにも含めない。
