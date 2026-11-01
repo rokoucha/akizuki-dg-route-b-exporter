@@ -31,6 +31,14 @@ go run . /dev/ttyUSB0
 | 直近1時間の送信時間      | s    | 診断用                                               |
 | 送信時間制限中           |      | 診断用                                               |
 
+## リリース
+
+公開ビルドだけを再実行する場合は、既存タグを指定する。tagprは実行せず、指定タグを検証・ビルドして公開する。
+
+```sh
+gh workflow run release.yml -f tag=v1.0.2
+```
+
 ## links
 
 - <https://rabbit-note.com/wp-content/uploads/2016/12/50f67559796399098e50cba8fdbe6d0a.pdf>
