@@ -22,7 +22,7 @@ import (
 // スマートメーターの計測値は 1 分程度で更新されるので、それより短い間隔で問い合わせても電波を浪費するだけ
 const minPollInterval = 10 * time.Second
 
-const version = "1.0.2"
+const version = "1.0.3"
 
 type options struct {
 	BaudRate uint `short:"b" long:"baud-rate" description:"Baud rate to connect to Wi-SUN module" default:"115200"`

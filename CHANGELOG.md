@@ -1,5 +1,11 @@
 # Changelog
 
+## [v1.0.3](https://github.com/rokoucha/akizuki-dg-route-b-exporter/compare/v1.0.2...v1.0.3) - 2026-11-05
+
+- 公開ビルドのCI起動条件を修正し既存タグの再公開に対応 by @rokoucha in https://github.com/rokoucha/akizuki-dg-route-b-exporter/pull/12
+- 手動公開時にtagprの空出力を安全に扱う by @rokoucha in https://github.com/rokoucha/akizuki-dg-route-b-exporter/pull/14
+- Update Songmu/tagpr action to v1.22.0 by @renovate[bot] in https://github.com/rokoucha/akizuki-dg-route-b-exporter/pull/15
+
 ## [v1.0.2](https://github.com/rokoucha/akizuki-dg-route-b-exporter/compare/v1.0.1...v1.0.2) - 2026-11-01
 
 - Update Songmu/tagpr action to v1.21.4 by @renovate[bot] in https://github.com/rokoucha/akizuki-dg-route-b-exporter/pull/9
